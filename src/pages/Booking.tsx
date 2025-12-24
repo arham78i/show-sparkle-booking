@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useMovieDetails } from '@/hooks/useTMDBMovies';
+import { supabase } from '@/integrations/supabase/client';
 import { SeatWithStatus, SeatCategory } from '@/types/database';
 import { ArrowLeft, Clock, Calendar, MapPin, Ticket, DollarSign, Star, AlertCircle, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -175,29 +176,55 @@ export default function Booking() {
       return;
     }
 
+    if (!showInfo) return;
+
     setBooking(true);
 
     try {
-      // Generate booking reference
-      const bookingRef = `BK${format(new Date(), 'yyyyMMdd')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
       const total = calculateTotal();
 
-      // Simulate processing delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Create booking in database
+      const { data: bookingData, error: bookingError } = await supabase
+        .from('bookings')
+        .insert({
+          user_id: user.id,
+          show_id: showInfo.id,
+          total_amount: total,
+          status: 'confirmed',
+          booking_reference: `BK${format(new Date(), 'yyyyMMdd')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        })
+        .select()
+        .single();
+
+      if (bookingError) throw bookingError;
+
+      // Insert booking seats
+      const seatsToInsert = selectedSeats.map(seat => ({
+        booking_id: bookingData.id,
+        show_id: showInfo.id,
+        seat_id: seat.id,
+        price: getSeatPrice(seat),
+      }));
+
+      const { error: seatsError } = await supabase
+        .from('booking_seats')
+        .insert(seatsToInsert);
+
+      if (seatsError) throw seatsError;
 
       toast({
         title: 'Booking confirmed!',
-        description: `Your booking reference is ${bookingRef}`,
+        description: `Your booking reference is ${bookingData.booking_reference}`,
       });
 
-      navigate(`/booking/confirmation/${bookingRef}`, {
+      navigate(`/booking/confirmation/${bookingData.id}`, {
         state: {
           booking: {
-            id: bookingRef,
-            booking_reference: bookingRef,
+            id: bookingData.id,
+            booking_reference: bookingData.booking_reference,
             total_amount: total,
             status: 'confirmed',
-            created_at: new Date().toISOString(),
+            created_at: bookingData.created_at,
             movie: movie,
             show: showInfo,
             seats: selectedSeats,
