@@ -1,94 +1,77 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useLocation, Link } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { supabase } from '@/integrations/supabase/client';
-import { Booking, BookingSeat, Show, Movie, Screen, Theater, Seat } from '@/types/database';
-import { CheckCircle, Calendar, Clock, MapPin, Ticket, Home, Film } from 'lucide-react';
+import { CheckCircle, Calendar, Clock, MapPin, Ticket, Home, Film, Star, DollarSign } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
-interface BookingWithDetails extends Booking {
-  show: Show & {
-    movie: Movie;
-    screen: Screen & { theater: Theater };
+interface BookingDetails {
+  id: string;
+  booking_reference: string;
+  total_amount: number;
+  status: string;
+  created_at: string;
+  movie: {
+    title: string;
+    poster_url: string | null;
+    genre: string[];
+    duration_minutes: number;
+    rating: number | null;
   };
-}
-
-interface BookingSeatWithDetails extends BookingSeat {
-  seat: Seat;
+  show: {
+    show_date: string;
+    show_time: string;
+    theater_name: string;
+    theater_location: string;
+    screen_name: string;
+  };
+  seats: Array<{
+    id: string;
+    row_label: string;
+    seat_number: number;
+    category: string;
+    price_multiplier: number;
+  }>;
 }
 
 export default function BookingConfirmation() {
   const { bookingId } = useParams<{ bookingId: string }>();
-  const [booking, setBooking] = useState<BookingWithDetails | null>(null);
-  const [seats, setSeats] = useState<BookingSeatWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
+  const location = useLocation();
+  const [booking, setBooking] = useState<BookingDetails | null>(null);
 
   useEffect(() => {
-    if (bookingId) {
-      fetchBookingDetails();
+    // Get booking from location state (passed from Booking page)
+    if (location.state?.booking) {
+      setBooking(location.state.booking);
     }
-  }, [bookingId]);
-
-  const fetchBookingDetails = async () => {
-    setLoading(true);
-
-    const { data: bookingData } = await supabase
-      .from('bookings')
-      .select(`
-        *,
-        show:shows(
-          *,
-          movie:movies(*),
-          screen:screens(
-            *,
-            theater:theaters(*)
-          )
-        )
-      `)
-      .eq('id', bookingId)
-      .maybeSingle();
-
-    if (bookingData) {
-      setBooking(bookingData as unknown as BookingWithDetails);
-    }
-
-    const { data: seatsData } = await supabase
-      .from('booking_seats')
-      .select(`
-        *,
-        seat:seats(*)
-      `)
-      .eq('booking_id', bookingId);
-
-    if (seatsData) {
-      setSeats(seatsData as unknown as BookingSeatWithDetails[]);
-    }
-
-    setLoading(false);
-  };
-
-  if (loading) {
-    return (
-      <Layout>
-        <div className="container mx-auto px-4 py-16 max-w-2xl">
-          <Skeleton className="h-12 w-48 mx-auto mb-8" />
-          <Skeleton className="h-96 w-full rounded-xl" />
-        </div>
-      </Layout>
-    );
-  }
+  }, [location]);
 
   if (!booking) {
     return (
       <Layout>
         <div className="container mx-auto px-4 py-16 text-center">
-          <h1 className="font-display text-4xl mb-4">Booking Not Found</h1>
-          <Button asChild>
-            <Link to="/bookings">View My Bookings</Link>
-          </Button>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-seat-available/20 mb-4">
+            <CheckCircle className="h-10 w-10 text-seat-available" />
+          </div>
+          <h1 className="font-display text-4xl mb-4">Booking Confirmed!</h1>
+          <p className="text-muted-foreground mb-8">
+            Your booking reference: <span className="font-mono text-foreground">{bookingId}</span>
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button asChild>
+              <Link to="/movies">
+                <Film className="mr-2 h-4 w-4" />
+                Browse More Movies
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/">
+                <Home className="mr-2 h-4 w-4" />
+                Go Home
+              </Link>
+            </Button>
+          </div>
         </div>
       </Layout>
     );
@@ -127,19 +110,25 @@ export default function BookingConfirmation() {
           <CardContent className="p-6 space-y-6">
             {/* Movie Info */}
             <div className="flex gap-4">
-              {booking.show.movie.poster_url && (
+              {booking.movie.poster_url && (
                 <img
-                  src={booking.show.movie.poster_url}
-                  alt={booking.show.movie.title}
+                  src={booking.movie.poster_url}
+                  alt={booking.movie.title}
                   className="w-20 h-28 rounded-lg object-cover"
                 />
               )}
               <div>
                 <h2 className="font-display text-2xl tracking-wide mb-1">
-                  {booking.show.movie.title}
+                  {booking.movie.title}
                 </h2>
-                <p className="text-muted-foreground text-sm">
-                  {booking.show.movie.genre.join(' • ')} • {booking.show.movie.duration_minutes} min
+                <p className="text-muted-foreground text-sm flex items-center gap-2">
+                  {booking.movie.genre.slice(0, 3).join(' • ')} • {booking.movie.duration_minutes} min
+                  {booking.movie.rating && (
+                    <span className="flex items-center gap-1 text-accent">
+                      <Star className="h-3 w-3 fill-accent" />
+                      {booking.movie.rating.toFixed(1)}
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -168,9 +157,9 @@ export default function BookingConfirmation() {
                 <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
                 <div>
                   <p className="text-sm text-muted-foreground">Venue</p>
-                  <p className="font-medium">{booking.show.screen.theater.name}</p>
+                  <p className="font-medium">{booking.show.theater_name}</p>
                   <p className="text-sm text-muted-foreground">
-                    {booking.show.screen.name} • {booking.show.screen.theater.location}
+                    {booking.show.screen_name} • {booking.show.theater_location}
                   </p>
                 </div>
               </div>
@@ -178,19 +167,20 @@ export default function BookingConfirmation() {
 
             {/* Seats */}
             <div className="border-t border-border pt-4">
-              <p className="text-sm text-muted-foreground mb-2">Seats ({seats.length})</p>
+              <p className="text-sm text-muted-foreground mb-2">Seats ({booking.seats.length})</p>
               <div className="flex flex-wrap gap-2">
-                {seats
+                {booking.seats
                   .sort((a, b) => 
-                    a.seat.row_label.localeCompare(b.seat.row_label) || 
-                    a.seat.seat_number - b.seat.seat_number
+                    a.row_label.localeCompare(b.row_label) || 
+                    a.seat_number - b.seat_number
                   )
-                  .map((bs) => (
+                  .map((seat) => (
                     <span
-                      key={bs.id}
+                      key={seat.id}
                       className="px-3 py-1 bg-accent/20 text-accent rounded-full text-sm font-medium"
                     >
-                      {bs.seat.row_label}{bs.seat.seat_number}
+                      {seat.row_label}{seat.seat_number}
+                      <span className="text-xs ml-1 opacity-70 capitalize">({seat.category})</span>
                     </span>
                   ))}
               </div>
@@ -199,8 +189,9 @@ export default function BookingConfirmation() {
             {/* Total */}
             <div className="border-t border-border pt-4 flex justify-between items-center">
               <span className="text-lg font-medium">Total Paid</span>
-              <span className="font-display text-3xl text-accent">
-                ${booking.total_amount.toFixed(2)}
+              <span className="font-display text-3xl text-accent flex items-center">
+                <DollarSign className="h-6 w-6" />
+                {booking.total_amount.toFixed(2)}
               </span>
             </div>
           </CardContent>
@@ -220,15 +211,22 @@ export default function BookingConfirmation() {
           </div>
         </Card>
 
+        {/* Instructions */}
+        <Card className="mt-6 bg-secondary/30">
+          <CardContent className="p-4">
+            <h3 className="font-medium mb-2">Important Information</h3>
+            <ul className="text-sm text-muted-foreground space-y-1">
+              <li>• Please arrive 15 minutes before the show starts</li>
+              <li>• Show your booking reference at the ticket counter</li>
+              <li>• This confirmation is valid as your entry ticket</li>
+              <li>• No outside food or beverages allowed</li>
+            </ul>
+          </CardContent>
+        </Card>
+
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-4 mt-8">
           <Button asChild className="flex-1">
-            <Link to="/bookings">
-              <Ticket className="mr-2 h-4 w-4" />
-              View My Bookings
-            </Link>
-          </Button>
-          <Button variant="outline" asChild className="flex-1">
             <Link to="/movies">
               <Film className="mr-2 h-4 w-4" />
               Browse More Movies
