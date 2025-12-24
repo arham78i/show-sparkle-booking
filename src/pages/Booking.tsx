@@ -2,8 +2,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { SeatMap } from '@/components/booking/SeatMap';
-import { PaymentModal } from '@/components/booking/PaymentModal';
-import { ReservationTimer } from '@/components/booking/ReservationTimer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -12,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useMovieDetails } from '@/hooks/useTMDBMovies';
 import { useRealtimeSeats } from '@/hooks/useRealtimeSeats';
 import { SeatWithStatus } from '@/types/database';
-import { ArrowLeft, Clock, Calendar, MapPin, Ticket, DollarSign, Star, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Clock, Calendar, MapPin, Ticket, DollarSign, Star, AlertCircle, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 interface ShowInfo {
@@ -70,7 +68,7 @@ export default function Booking() {
 
   const [showInfo, setShowInfo] = useState<ShowInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showPayment, setShowPayment] = useState(false);
+  const [booking, setBooking] = useState(false);
 
   const { movie } = useMovieDetails(showInfo?.movie_id);
 
@@ -109,7 +107,7 @@ export default function Booking() {
     return showInfo.base_price * seat.price_multiplier;
   };
 
-  const handleProceedToPayment = async () => {
+  const handleBookTicket = async () => {
     if (!user) {
       toast({
         title: 'Please sign in',
@@ -128,65 +126,58 @@ export default function Booking() {
       return;
     }
 
-    // Reserve seats first
-    const reserveResult = await reserveSeats();
-    
-    if (!reserveResult.success) {
-      toast({
-        title: 'Could not reserve seats',
-        description: reserveResult.message || 'Some seats may no longer be available',
-        variant: 'destructive',
-      });
-      return;
-    }
+    setBooking(true);
 
-    // Show payment modal
-    setShowPayment(true);
-  };
+    try {
+      // Reserve seats first
+      const reserveResult = await reserveSeats();
+      
+      if (!reserveResult.success) {
+        toast({
+          title: 'Could not reserve seats',
+          description: reserveResult.message || 'Some seats may no longer be available',
+          variant: 'destructive',
+        });
+        setBooking(false);
+        return;
+      }
 
-  const handlePaymentComplete = async () => {
-    const total = calculateTotal();
-    const result = await completeBooking(total);
+      // Complete booking
+      const total = calculateTotal();
+      const result = await completeBooking(total);
 
-    setShowPayment(false);
+      if (result.success && result.booking_reference) {
+        toast({
+          title: 'Booking confirmed!',
+          description: `Your booking reference is ${result.booking_reference}`,
+        });
 
-    if (result.success && result.booking_reference) {
-      toast({
-        title: 'Booking confirmed!',
-        description: `Your booking reference is ${result.booking_reference}`,
-      });
-
-      navigate(`/booking/confirmation/${result.booking_id}`, {
-        state: {
-          booking: {
-            id: result.booking_id,
-            booking_reference: result.booking_reference,
-            total_amount: total,
-            status: 'confirmed',
-            created_at: new Date().toISOString(),
-            movie: movie,
-            show: showInfo,
-            seats: selectedSeats,
+        navigate(`/booking/confirmation/${result.booking_id}`, {
+          state: {
+            booking: {
+              id: result.booking_id,
+              booking_reference: result.booking_reference,
+              total_amount: total,
+              status: 'confirmed',
+              created_at: new Date().toISOString(),
+              movie: movie,
+              show: showInfo,
+              seats: selectedSeats,
+            }
           }
-        }
-      });
-    } else {
-      toast({
-        title: 'Booking failed',
-        description: result.message || 'Something went wrong',
-        variant: 'destructive',
-      });
+        });
+      } else {
+        toast({
+          title: 'Booking failed',
+          description: result.message || 'Something went wrong',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setBooking(false);
     }
   };
 
-  const handleReservationExpiry = () => {
-    clearSelection();
-    toast({
-      title: 'Reservation expired',
-      description: 'Your seat reservation has expired. Please select seats again.',
-      variant: 'destructive',
-    });
-  };
 
   if (loading) {
     return (
@@ -264,20 +255,10 @@ export default function Booking() {
           <div className="lg:col-span-2">
             <Card className="bg-card/80">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="font-display text-xl tracking-wide">SELECT YOUR SEATS</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Select up to 10 seats. Click on available seats to select them.
-                    </p>
-                  </div>
-                  {reservationExpiry && (
-                    <ReservationTimer
-                      expiryTime={reservationExpiry}
-                      onExpire={handleReservationExpiry}
-                    />
-                  )}
-                </div>
+                <CardTitle className="font-display text-xl tracking-wide">SELECT YOUR SEATS</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Select up to 10 seats. Click on available seats to select them.
+                </p>
               </CardHeader>
               <CardContent>
                 {/* Real-time indicator */}
@@ -398,10 +379,17 @@ export default function Booking() {
                 <Button
                   className="w-full cinema-glow"
                   size="lg"
-                  disabled={selectedSeats.length === 0}
-                  onClick={handleProceedToPayment}
+                  disabled={selectedSeats.length === 0 || booking}
+                  onClick={handleBookTicket}
                 >
-                  Proceed to Payment
+                  {booking ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Booking...
+                    </>
+                  ) : (
+                    'Book Ticket'
+                  )}
                 </Button>
 
                 {!user && (
@@ -416,14 +404,6 @@ export default function Booking() {
         </div>
       </div>
 
-      {/* Payment Modal */}
-      <PaymentModal
-        open={showPayment}
-        onClose={() => setShowPayment(false)}
-        onComplete={handlePaymentComplete}
-        amount={calculateTotal()}
-        seatCount={selectedSeats.length}
-      />
     </Layout>
   );
 }
