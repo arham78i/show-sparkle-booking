@@ -141,11 +141,11 @@ export default function MyBookings() {
     const hoursUntilShow = differenceInHours(showDateTime, now);
 
     if (hoursUntilShow > 24) {
-      return { eligible: true, percentage: 100, message: 'Full refund available' };
+      return { eligible: true, percentage: 100, message: 'Full refund available', refundAmount: booking.total_amount };
     } else if (hoursUntilShow > 0) {
-      return { eligible: true, percentage: 50, message: '50% refund (less than 24 hours)' };
+      return { eligible: true, percentage: 50, message: '50% refund (less than 24 hours)', refundAmount: booking.total_amount * 0.5 };
     } else {
-      return { eligible: false, percentage: 0, message: 'Show has already started' };
+      return { eligible: true, percentage: 0, message: 'No refund (show has started)', refundAmount: 0 };
     }
   };
 
@@ -208,7 +208,7 @@ export default function MyBookings() {
           <div className="space-y-4">
             {bookings.map((booking) => {
               const refundInfo = getRefundInfo(booking);
-              const canCancel = booking.status === 'confirmed' && refundInfo.eligible;
+              const canCancel = booking.status === 'confirmed'; // Always allow cancel for confirmed bookings
               const seats = Array.isArray(booking.seats) ? booking.seats : [];
 
               return (
@@ -305,11 +305,11 @@ export default function MyBookings() {
                                   <p>Are you sure you want to cancel this booking?</p>
                                   <div className="bg-secondary/50 p-3 rounded-lg mt-2">
                                     <p className="font-medium text-foreground">{refundInfo.message}</p>
-                                    {refundInfo.percentage > 0 && (
-                                      <p className="text-sm mt-1">
-                                        Refund amount: ${(booking.total_amount * refundInfo.percentage / 100).toFixed(2)}
-                                      </p>
-                                    )}
+                                    <p className="text-sm mt-1">
+                                      Refund amount: <span className={refundInfo.refundAmount > 0 ? 'text-green-500' : 'text-destructive'}>
+                                        ${refundInfo.refundAmount.toFixed(2)}
+                                      </span>
+                                    </p>
                                   </div>
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
