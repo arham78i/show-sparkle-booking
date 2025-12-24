@@ -182,35 +182,39 @@ export default function Booking() {
 
     try {
       const total = calculateTotal();
+      const bookingRef = `BK${format(new Date(), 'yyyyMMdd')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-      // Create booking in database
+      // Prepare seats data for JSONB storage
+      const seatsData = selectedSeats.map(seat => ({
+        id: seat.id,
+        row_label: seat.row_label,
+        seat_number: seat.seat_number,
+        category: seat.category,
+        price: getSeatPrice(seat),
+      }));
+
+      // Create booking in app_bookings table
       const { data: bookingData, error: bookingError } = await supabase
-        .from('bookings')
+        .from('app_bookings')
         .insert({
           user_id: user.id,
-          show_id: showInfo.id,
+          tmdb_movie_id: showInfo.movie_id,
+          movie_title: movie?.title || 'Movie',
+          movie_poster_url: movie?.poster_url || null,
+          theater_name: showInfo.theater_name,
+          theater_location: showInfo.theater_location,
+          screen_name: showInfo.screen_name,
+          show_date: showInfo.show_date,
+          show_time: showInfo.show_time,
+          seats: seatsData,
           total_amount: total,
+          booking_reference: bookingRef,
           status: 'confirmed',
-          booking_reference: `BK${format(new Date(), 'yyyyMMdd')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
         })
         .select()
         .single();
 
       if (bookingError) throw bookingError;
-
-      // Insert booking seats
-      const seatsToInsert = selectedSeats.map(seat => ({
-        booking_id: bookingData.id,
-        show_id: showInfo.id,
-        seat_id: seat.id,
-        price: getSeatPrice(seat),
-      }));
-
-      const { error: seatsError } = await supabase
-        .from('booking_seats')
-        .insert(seatsToInsert);
-
-      if (seatsError) throw seatsError;
 
       toast({
         title: 'Booking confirmed!',

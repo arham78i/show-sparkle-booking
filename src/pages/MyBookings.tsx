@@ -22,41 +22,39 @@ import { supabase } from '@/integrations/supabase/client';
 import { Ticket, Calendar, Clock, MapPin, ChevronRight, XCircle, RefreshCcw } from 'lucide-react';
 import { format, parseISO, differenceInHours } from 'date-fns';
 
-interface BookingWithDetails {
+interface SeatData {
   id: string;
-  booking_reference: string;
+  row_label: string;
+  seat_number: number;
+  category: string;
+  price: number;
+}
+
+interface AppBooking {
+  id: string;
+  user_id: string;
+  tmdb_movie_id: string;
+  movie_title: string;
+  movie_poster_url: string | null;
+  theater_name: string;
+  theater_location: string | null;
+  screen_name: string;
+  show_date: string;
+  show_time: string;
+  seats: SeatData[];
   total_amount: number;
+  booking_reference: string;
   status: string;
-  created_at: string;
   cancelled_at: string | null;
   refund_amount: number | null;
-  show: {
-    show_date: string;
-    show_time: string;
-    movie: {
-      title: string;
-      poster_url: string | null;
-    };
-    screen: {
-      name: string;
-      theater: {
-        name: string;
-      };
-    };
-  };
-  booking_seats: {
-    id: string;
-    seat: {
-      row_label: string;
-      seat_number: number;
-    };
-  }[];
+  created_at: string;
+  updated_at: string;
 }
 
 export default function MyBookings() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [bookings, setBookings] = useState<BookingWithDetails[]>([]);
+  const [bookings, setBookings] = useState<AppBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState<string | null>(null);
 
@@ -70,34 +68,18 @@ export default function MyBookings() {
     setLoading(true);
 
     const { data, error } = await supabase
-      .from('bookings')
-      .select(`
-        id,
-        booking_reference,
-        total_amount,
-        status,
-        created_at,
-        cancelled_at,
-        refund_amount,
-        show:shows(
-          show_date,
-          show_time,
-          movie:movies(title, poster_url),
-          screen:screens(
-            name,
-            theater:theaters(name)
-          )
-        ),
-        booking_seats(
-          id,
-          seat:seats(row_label, seat_number)
-        )
-      `)
+      .from('app_bookings')
+      .select('*')
       .eq('user_id', user!.id)
       .order('created_at', { ascending: false });
 
     if (data && !error) {
-      setBookings(data as unknown as BookingWithDetails[]);
+      // Parse seats from JSON
+      const parsedBookings = data.map(booking => ({
+        ...booking,
+        seats: (typeof booking.seats === 'string' ? JSON.parse(booking.seats) : booking.seats) as SeatData[],
+      }));
+      setBookings(parsedBookings as AppBooking[]);
     }
 
     setLoading(false);
@@ -109,7 +91,7 @@ export default function MyBookings() {
     setCancelling(bookingId);
 
     try {
-      const { data, error } = await supabase.rpc('cancel_booking', {
+      const { data, error } = await supabase.rpc('cancel_app_booking', {
         _booking_id: bookingId,
         _user_id: user.id,
       });
@@ -153,8 +135,8 @@ export default function MyBookings() {
     }
   };
 
-  const getRefundInfo = (booking: BookingWithDetails) => {
-    const showDateTime = new Date(`${booking.show.show_date}T${booking.show.show_time}`);
+  const getRefundInfo = (booking: AppBooking) => {
+    const showDateTime = new Date(`${booking.show_date}T${booking.show_time}`);
     const now = new Date();
     const hoursUntilShow = differenceInHours(showDateTime, now);
 
@@ -227,16 +209,17 @@ export default function MyBookings() {
             {bookings.map((booking) => {
               const refundInfo = getRefundInfo(booking);
               const canCancel = booking.status === 'confirmed' && refundInfo.eligible;
+              const seats = Array.isArray(booking.seats) ? booking.seats : [];
 
               return (
                 <Card key={booking.id} className="bg-card/80 hover:border-primary/50 transition-colors">
                   <CardContent className="p-6">
                     <div className="flex flex-col md:flex-row gap-4">
                       {/* Poster */}
-                      {booking.show?.movie?.poster_url && (
+                      {booking.movie_poster_url && (
                         <img
-                          src={booking.show.movie.poster_url}
-                          alt={booking.show.movie.title}
+                          src={booking.movie_poster_url}
+                          alt={booking.movie_title}
                           className="w-20 h-28 rounded-lg object-cover hidden md:block"
                         />
                       )}
@@ -246,7 +229,7 @@ export default function MyBookings() {
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <h3 className="font-display text-xl tracking-wide">
-                              {booking.show?.movie?.title || 'Movie'}
+                              {booking.movie_title}
                             </h3>
                             <p className="text-sm text-muted-foreground">
                               {booking.booking_reference}
@@ -262,35 +245,31 @@ export default function MyBookings() {
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Calendar className="h-4 w-4" />
-                            {booking.show?.show_date 
-                              ? format(parseISO(booking.show.show_date), 'MMM d, yyyy')
-                              : 'N/A'}
+                            {format(parseISO(booking.show_date), 'MMM d, yyyy')}
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="h-4 w-4" />
-                            {booking.show?.show_time
-                              ? format(parseISO(`2000-01-01T${booking.show.show_time}`), 'h:mm a')
-                              : 'N/A'}
+                            {format(parseISO(`2000-01-01T${booking.show_time}`), 'h:mm a')}
                           </span>
                           <span className="flex items-center gap-1">
                             <MapPin className="h-4 w-4" />
-                            {booking.show?.screen?.theater?.name || 'N/A'}
+                            {booking.theater_name}
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between pt-2">
                           <div className="flex gap-1 flex-wrap">
-                            {booking.booking_seats?.slice(0, 5).map((bs) => (
+                            {seats.slice(0, 5).map((seat) => (
                               <span
-                                key={bs.id}
+                                key={seat.id}
                                 className="px-2 py-0.5 bg-secondary text-xs rounded"
                               >
-                                {bs.seat?.row_label}{bs.seat?.seat_number}
+                                {seat.row_label}{seat.seat_number}
                               </span>
                             ))}
-                            {booking.booking_seats?.length > 5 && (
+                            {seats.length > 5 && (
                               <span className="px-2 py-0.5 bg-secondary text-xs rounded">
-                                +{booking.booking_seats.length - 5}
+                                +{seats.length - 5}
                               </span>
                             )}
                           </div>

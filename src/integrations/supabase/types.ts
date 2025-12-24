@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_bookings: {
+        Row: {
+          booking_reference: string
+          cancelled_at: string | null
+          created_at: string
+          id: string
+          movie_poster_url: string | null
+          movie_title: string
+          refund_amount: number | null
+          screen_name: string
+          seats: Json
+          show_date: string
+          show_time: string
+          status: string
+          theater_location: string | null
+          theater_name: string
+          tmdb_movie_id: string
+          total_amount: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          booking_reference: string
+          cancelled_at?: string | null
+          created_at?: string
+          id?: string
+          movie_poster_url?: string | null
+          movie_title: string
+          refund_amount?: number | null
+          screen_name?: string
+          seats?: Json
+          show_date: string
+          show_time: string
+          status?: string
+          theater_location?: string | null
+          theater_name: string
+          tmdb_movie_id: string
+          total_amount: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          booking_reference?: string
+          cancelled_at?: string | null
+          created_at?: string
+          id?: string
+          movie_poster_url?: string | null
+          movie_title?: string
+          refund_amount?: number | null
+          screen_name?: string
+          seats?: Json
+          show_date?: string
+          show_time?: string
+          status?: string
+          theater_location?: string | null
+          theater_name?: string
+          tmdb_movie_id?: string
+          total_amount?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       booking_seats: {
         Row: {
           booking_id: string
@@ -425,6 +488,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cancel_app_booking: {
+        Args: { _booking_id: string; _user_id: string }
+        Returns: {
+          message: string
+          refund_amount: number
+          success: boolean
+        }[]
+      }
       cancel_booking: {
         Args: { _booking_id: string; _user_id: string }
         Returns: {
