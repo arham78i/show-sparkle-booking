@@ -8,8 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useMovieDetails } from '@/hooks/useTMDBMovies';
-import { useRealtimeSeats } from '@/hooks/useRealtimeSeats';
-import { SeatWithStatus } from '@/types/database';
+import { SeatWithStatus, SeatCategory } from '@/types/database';
 import { ArrowLeft, Clock, Calendar, MapPin, Ticket, DollarSign, Star, AlertCircle, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
@@ -22,6 +21,48 @@ interface ShowInfo {
   theater_name: string;
   theater_location: string;
   screen_name: string;
+}
+
+// Generate sample seats for a screen
+function generateSeats(): SeatWithStatus[] {
+  const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+  const seatsPerRow = 12;
+  const seats: SeatWithStatus[] = [];
+
+  rows.forEach((row, rowIdx) => {
+    for (let seatNum = 1; seatNum <= seatsPerRow; seatNum++) {
+      let category: SeatCategory = 'regular';
+      let priceMultiplier = 1.0;
+
+      // VIP rows (I, J - back rows)
+      if (rowIdx >= 8) {
+        category = 'vip';
+        priceMultiplier = 1.5;
+      }
+      // Premium rows (F, G, H - middle rows)
+      else if (rowIdx >= 5) {
+        category = 'premium';
+        priceMultiplier = 1.25;
+      }
+
+      // Randomly book some seats (15% chance)
+      const isBooked = Math.random() < 0.15;
+
+      seats.push({
+        id: `${row}${seatNum}`,
+        screen_id: 'sample-screen',
+        row_label: row,
+        seat_number: seatNum,
+        category,
+        price_multiplier: priceMultiplier,
+        created_at: new Date().toISOString(),
+        isBooked,
+        isSelected: false,
+      });
+    }
+  });
+
+  return seats;
 }
 
 // Parse show ID to get show info
@@ -67,33 +108,41 @@ export default function Booking() {
   const { toast } = useToast();
 
   const [showInfo, setShowInfo] = useState<ShowInfo | null>(null);
+  const [seats, setSeats] = useState<SeatWithStatus[]>([]);
+  const [selectedSeats, setSelectedSeats] = useState<SeatWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
 
   const { movie } = useMovieDetails(showInfo?.movie_id);
-
-  const {
-    seats,
-    selectedSeats,
-    reservationExpiry,
-    handleSeatClick,
-    reserveSeats,
-    completeBooking,
-    clearSelection,
-  } = useRealtimeSeats({
-    showId: showId || '',
-    screenId: 'screen-1',
-  });
 
   useEffect(() => {
     if (showId) {
       const info = parseShowId(showId);
       if (info) {
         setShowInfo(info);
+        setSeats(generateSeats());
       }
       setLoading(false);
     }
   }, [showId]);
+
+  const handleSeatClick = (seat: SeatWithStatus) => {
+    if (seat.isBooked) return;
+    
+    setSeats(prev =>
+      prev.map(s =>
+        s.id === seat.id ? { ...s, isSelected: !s.isSelected } : s
+      )
+    );
+
+    setSelectedSeats(prev => {
+      const exists = prev.find(s => s.id === seat.id);
+      if (exists) {
+        return prev.filter(s => s.id !== seat.id);
+      }
+      return [...prev, { ...seat, isSelected: true }];
+    });
+  };
 
   const calculateTotal = useCallback(() => {
     if (!showInfo) return 0;
@@ -129,55 +178,42 @@ export default function Booking() {
     setBooking(true);
 
     try {
-      // Reserve seats first
-      const reserveResult = await reserveSeats();
-      
-      if (!reserveResult.success) {
-        toast({
-          title: 'Could not reserve seats',
-          description: reserveResult.message || 'Some seats may no longer be available',
-          variant: 'destructive',
-        });
-        setBooking(false);
-        return;
-      }
-
-      // Complete booking
+      // Generate booking reference
+      const bookingRef = `BK${format(new Date(), 'yyyyMMdd')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
       const total = calculateTotal();
-      const result = await completeBooking(total);
 
-      if (result.success && result.booking_reference) {
-        toast({
-          title: 'Booking confirmed!',
-          description: `Your booking reference is ${result.booking_reference}`,
-        });
+      // Simulate processing delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-        navigate(`/booking/confirmation/${result.booking_id}`, {
-          state: {
-            booking: {
-              id: result.booking_id,
-              booking_reference: result.booking_reference,
-              total_amount: total,
-              status: 'confirmed',
-              created_at: new Date().toISOString(),
-              movie: movie,
-              show: showInfo,
-              seats: selectedSeats,
-            }
+      toast({
+        title: 'Booking confirmed!',
+        description: `Your booking reference is ${bookingRef}`,
+      });
+
+      navigate(`/booking/confirmation/${bookingRef}`, {
+        state: {
+          booking: {
+            id: bookingRef,
+            booking_reference: bookingRef,
+            total_amount: total,
+            status: 'confirmed',
+            created_at: new Date().toISOString(),
+            movie: movie,
+            show: showInfo,
+            seats: selectedSeats,
           }
-        });
-      } else {
-        toast({
-          title: 'Booking failed',
-          description: result.message || 'Something went wrong',
-          variant: 'destructive',
-        });
-      }
+        }
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Booking failed',
+        description: error.message || 'Something went wrong',
+        variant: 'destructive',
+      });
     } finally {
       setBooking(false);
     }
   };
-
 
   if (loading) {
     return (
@@ -261,15 +297,6 @@ export default function Booking() {
                 </p>
               </CardHeader>
               <CardContent>
-                {/* Real-time indicator */}
-                <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                  </span>
-                  Live seat availability
-                </div>
-
                 {/* Price Legend */}
                 <div className="mb-6 p-4 bg-secondary/30 rounded-lg">
                   <h4 className="text-sm font-medium mb-3">Seat Prices</h4>
@@ -403,7 +430,6 @@ export default function Booking() {
           </div>
         </div>
       </div>
-
     </Layout>
   );
 }
