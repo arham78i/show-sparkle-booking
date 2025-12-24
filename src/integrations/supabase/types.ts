@@ -66,9 +66,12 @@ export type Database = {
       bookings: {
         Row: {
           booking_reference: string
+          cancelled_at: string | null
           created_at: string
           id: string
           payment_intent_id: string | null
+          paypal_order_id: string | null
+          refund_amount: number | null
           show_id: string
           status: Database["public"]["Enums"]["booking_status"]
           total_amount: number
@@ -77,9 +80,12 @@ export type Database = {
         }
         Insert: {
           booking_reference: string
+          cancelled_at?: string | null
           created_at?: string
           id?: string
           payment_intent_id?: string | null
+          paypal_order_id?: string | null
+          refund_amount?: number | null
           show_id: string
           status?: Database["public"]["Enums"]["booking_status"]
           total_amount: number
@@ -88,9 +94,12 @@ export type Database = {
         }
         Update: {
           booking_reference?: string
+          cancelled_at?: string | null
           created_at?: string
           id?: string
           payment_intent_id?: string | null
+          paypal_order_id?: string | null
+          refund_amount?: number | null
           show_id?: string
           status?: Database["public"]["Enums"]["booking_status"]
           total_amount?: number
@@ -222,6 +231,48 @@ export type Database = {
             columns: ["theater_id"]
             isOneToOne: false
             referencedRelation: "theaters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seat_reservations: {
+        Row: {
+          expires_at: string
+          id: string
+          reserved_at: string
+          seat_id: string
+          show_id: string
+          user_id: string | null
+        }
+        Insert: {
+          expires_at?: string
+          id?: string
+          reserved_at?: string
+          seat_id: string
+          show_id: string
+          user_id?: string | null
+        }
+        Update: {
+          expires_at?: string
+          id?: string
+          reserved_at?: string
+          seat_id?: string
+          show_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seat_reservations_seat_id_fkey"
+            columns: ["seat_id"]
+            isOneToOne: false
+            referencedRelation: "seats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seat_reservations_show_id_fkey"
+            columns: ["show_id"]
+            isOneToOne: false
+            referencedRelation: "shows"
             referencedColumns: ["id"]
           },
         ]
@@ -374,6 +425,35 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cancel_booking: {
+        Args: { _booking_id: string; _user_id: string }
+        Returns: {
+          message: string
+          refund_amount: number
+          success: boolean
+        }[]
+      }
+      check_seat_availability: {
+        Args: { _seat_ids: string[]; _show_id: string }
+        Returns: {
+          is_available: boolean
+          seat_id: string
+        }[]
+      }
+      cleanup_expired_reservations: { Args: never; Returns: undefined }
+      complete_booking: {
+        Args: {
+          _paypal_order_id?: string
+          _seat_ids: string[]
+          _show_id: string
+          _total_amount: number
+          _user_id: string
+        }
+        Returns: {
+          booking_id: string
+          booking_reference: string
+        }[]
+      }
       generate_booking_reference: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -381,6 +461,13 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      reserve_seats: {
+        Args: { _seat_ids: string[]; _show_id: string; _user_id: string }
+        Returns: {
+          message: string
+          success: boolean
+        }[]
       }
     }
     Enums: {
