@@ -5,20 +5,69 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useMovieDetails } from '@/hooks/useTMDBMovies';
 import { supabase } from '@/integrations/supabase/client';
-import { Movie, Show, Screen, Theater } from '@/types/database';
-import { Clock, Star, Calendar, Play, MapPin, ChevronRight } from 'lucide-react';
+import { Show, Screen, Theater } from '@/types/database';
+import { Clock, Star, Calendar, Play, MapPin, ChevronRight, DollarSign } from 'lucide-react';
 import { format, parseISO, addDays, isToday, isTomorrow } from 'date-fns';
 
 interface ShowWithDetails extends Show {
   screen: Screen & { theater: Theater };
 }
 
+// Sample shows generator for TMDB movies
+function generateSampleShows(movieId: string, selectedDate: string): ShowWithDetails[] {
+  const theaters = [
+    { id: '1', name: 'CineMax Downtown', location: 'Main Street', city: 'New York' },
+    { id: '2', name: 'StarPlex Cinema', location: 'Mall Road', city: 'New York' },
+    { id: '3', name: 'AMC Theater', location: 'Broadway', city: 'New York' },
+  ];
+
+  const times = ['10:00', '13:30', '16:00', '19:00', '21:30'];
+  const prices = [12.99, 14.99, 16.99];
+
+  const shows: ShowWithDetails[] = [];
+
+  theaters.forEach((theater, tIdx) => {
+    const selectedTimes = times.slice(tIdx, tIdx + 3);
+    selectedTimes.forEach((time, idx) => {
+      shows.push({
+        id: `${movieId}-${theater.id}-${time.replace(':', '')}`,
+        movie_id: movieId,
+        screen_id: `screen-${theater.id}-${idx + 1}`,
+        show_date: selectedDate,
+        show_time: time + ':00',
+        base_price: prices[idx % prices.length],
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        screen: {
+          id: `screen-${theater.id}-${idx + 1}`,
+          theater_id: theater.id,
+          name: `Screen ${idx + 1}`,
+          total_seats: 100,
+          rows: 10,
+          columns: 10,
+          created_at: new Date().toISOString(),
+          theater: {
+            ...theater,
+            address: `123 ${theater.location}`,
+            phone: '555-0100',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        },
+      });
+    });
+  });
+
+  return shows;
+}
+
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
-  const [movie, setMovie] = useState<Movie | null>(null);
+  const { movie, loading } = useMovieDetails(id);
   const [shows, setShows] = useState<ShowWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
   const dates = Array.from({ length: 7 }, (_, i) => {
@@ -32,50 +81,12 @@ export default function MovieDetails() {
   });
 
   useEffect(() => {
-    if (id) {
-      fetchMovie();
+    if (id && selectedDate && movie) {
+      // Generate sample shows for this movie
+      const sampleShows = generateSampleShows(id, selectedDate);
+      setShows(sampleShows);
     }
-  }, [id]);
-
-  useEffect(() => {
-    if (id && selectedDate) {
-      fetchShows();
-    }
-  }, [id, selectedDate]);
-
-  const fetchMovie = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('movies')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-
-    if (data && !error) {
-      setMovie(data as Movie);
-    }
-    setLoading(false);
-  };
-
-  const fetchShows = async () => {
-    const { data, error } = await supabase
-      .from('shows')
-      .select(`
-        *,
-        screen:screens(
-          *,
-          theater:theaters(*)
-        )
-      `)
-      .eq('movie_id', id)
-      .eq('show_date', selectedDate)
-      .eq('is_active', true)
-      .order('show_time', { ascending: true });
-
-    if (data && !error) {
-      setShows(data as unknown as ShowWithDetails[]);
-    }
-  };
+  }, [id, selectedDate, movie]);
 
   // Group shows by theater
   const showsByTheater = shows.reduce((acc, show) => {
@@ -125,10 +136,10 @@ export default function MovieDetails() {
       {/* Hero Section */}
       <section className="relative py-12 md:py-20">
         <div className="absolute inset-0 cinema-gradient">
-          {movie.poster_url && (
+          {movie.backdrop_url && (
             <div 
               className="absolute inset-0 opacity-20 bg-cover bg-center blur-sm"
-              style={{ backgroundImage: `url(${movie.poster_url})` }}
+              style={{ backgroundImage: `url(${movie.backdrop_url})` }}
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/40" />
@@ -165,7 +176,7 @@ export default function MovieDetails() {
               </div>
 
               <div className="flex flex-wrap items-center gap-6 text-muted-foreground">
-                {movie.rating && (
+                {movie.rating && movie.rating > 0 && (
                   <span className="flex items-center gap-2">
                     <Star className="h-5 w-5 fill-accent text-accent" />
                     <span className="text-xl font-semibold text-foreground">{movie.rating.toFixed(1)}</span>
@@ -249,12 +260,13 @@ export default function MovieDetails() {
                             key={show.id}
                             variant="outline"
                             asChild
-                            className="hover:bg-primary hover:text-primary-foreground"
+                            className="hover:bg-primary hover:text-primary-foreground group"
                           >
                             <Link to={`/booking/${show.id}`}>
-                              {format(parseISO(`2000-01-01T${show.show_time}`), 'h:mm a')}
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                ${show.base_price}
+                              <span>{format(parseISO(`2000-01-01T${show.show_time}`), 'h:mm a')}</span>
+                              <span className="ml-2 text-xs text-accent group-hover:text-primary-foreground flex items-center">
+                                <DollarSign className="h-3 w-3" />
+                                {show.base_price.toFixed(2)}
                               </span>
                               <ChevronRight className="ml-1 h-4 w-4" />
                             </Link>
@@ -274,12 +286,15 @@ export default function MovieDetails() {
         </section>
       )}
 
-      {movie.status === 'coming_soon' && (
+      {movie.status === 'coming_soon' && movie.release_date && (
         <section className="py-12 text-center">
           <div className="container mx-auto px-4">
             <h2 className="font-display text-3xl tracking-wider mb-4">COMING SOON</h2>
+            <p className="text-muted-foreground mb-2">
+              Releasing on {format(parseISO(movie.release_date), 'MMMM d, yyyy')}
+            </p>
             <p className="text-muted-foreground mb-6">
-              This movie is not yet available for booking. Check back later!
+              Tickets will be available for booking soon!
             </p>
             <Button asChild>
               <Link to="/movies">Browse Other Movies</Link>

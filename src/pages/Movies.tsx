@@ -1,72 +1,60 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { MovieGrid } from '@/components/movies/MovieGrid';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
-import { Movie, MovieStatus } from '@/types/database';
+import { useAllMovies, useSearchMovies, AppMovie } from '@/hooks/useTMDBMovies';
 import { Search, X } from 'lucide-react';
 
 const genres = ['Action', 'Comedy', 'Drama', 'Horror', 'Sci-Fi', 'Romance', 'Thriller', 'Animation'];
 
+type MovieStatus = 'now_showing' | 'coming_soon';
+
 export default function Movies() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<MovieStatus | null>(
     (searchParams.get('status') as MovieStatus) || null
   );
 
+  const { movies: allMovies, loading: loadingAll } = useAllMovies(selectedStatus || undefined);
+  const { movies: searchResults, loading: loadingSearch } = useSearchMovies(debouncedSearch);
+
+  // Debounce search
   useEffect(() => {
-    fetchMovies();
-  }, [selectedGenres, selectedStatus]);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-  const fetchMovies = async () => {
-    setLoading(true);
-    
-    let query = supabase
-      .from('movies')
-      .select('*')
-      .order('release_date', { ascending: false });
+  // Filter movies
+  const filteredMovies = useMemo(() => {
+    let movies: AppMovie[] = debouncedSearch ? searchResults : allMovies;
 
-    if (selectedStatus) {
-      query = query.eq('status', selectedStatus);
+    // Filter by genres
+    if (selectedGenres.length > 0) {
+      movies = movies.filter(m => 
+        m.genre.some(g => selectedGenres.includes(g))
+      );
     }
 
-    const { data, error } = await query;
-    
-    if (data && !error) {
-      let filtered = data as Movie[];
-      
-      // Filter by search
-      if (search) {
-        const searchLower = search.toLowerCase();
-        filtered = filtered.filter(m => 
-          m.title.toLowerCase().includes(searchLower) ||
-          m.description?.toLowerCase().includes(searchLower)
-        );
-      }
-      
-      // Filter by genres
-      if (selectedGenres.length > 0) {
-        filtered = filtered.filter(m => 
-          m.genre.some(g => selectedGenres.includes(g))
-        );
-      }
-      
-      setMovies(filtered);
+    // Filter by status if searching
+    if (debouncedSearch && selectedStatus) {
+      movies = movies.filter(m => m.status === selectedStatus);
     }
-    
-    setLoading(false);
-  };
+
+    return movies;
+  }, [allMovies, searchResults, debouncedSearch, selectedGenres, selectedStatus]);
+
+  const loading = loadingAll || loadingSearch;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchMovies();
     if (search) {
       searchParams.set('search', search);
     } else {
@@ -95,6 +83,7 @@ export default function Movies() {
 
   const clearFilters = () => {
     setSearch('');
+    setDebouncedSearch('');
     setSelectedGenres([]);
     setSelectedStatus(null);
     setSearchParams({});
@@ -172,14 +161,20 @@ export default function Movies() {
           {/* Clear Filters */}
           {hasFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
-              <X className="mr-2 h-4 w-4" />
-              Clear filters
+              <X className="mr-1 h-4 w-4" />
+              Clear Filters
             </Button>
           )}
         </div>
 
         {/* Results */}
-        <MovieGrid movies={movies} loading={loading} />
+        <div className="mb-4">
+          <p className="text-muted-foreground">
+            {loading ? 'Loading...' : `${filteredMovies.length} movies found`}
+          </p>
+        </div>
+
+        <MovieGrid movies={filteredMovies} loading={loading} />
       </div>
     </Layout>
   );

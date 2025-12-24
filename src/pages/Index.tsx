@@ -3,50 +3,22 @@ import { Link } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { MovieGrid } from '@/components/movies/MovieGrid';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
-import { Movie } from '@/types/database';
-import { Play, ChevronRight, Sparkles, Clock, Star } from 'lucide-react';
+import { useNowPlayingMovies, useUpcomingMovies, AppMovie } from '@/hooks/useTMDBMovies';
+import { Play, ChevronRight, Sparkles, Clock, Star, Calendar } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 
 export default function Index() {
-  const [nowShowing, setNowShowing] = useState<Movie[]>([]);
-  const [comingSoon, setComingSoon] = useState<Movie[]>([]);
-  const [featured, setFeatured] = useState<Movie | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { movies: nowShowing, loading: loadingNowShowing } = useNowPlayingMovies();
+  const { movies: comingSoon, loading: loadingComingSoon } = useUpcomingMovies();
+  const [featured, setFeatured] = useState<AppMovie | null>(null);
 
   useEffect(() => {
-    fetchMovies();
-  }, []);
-
-  const fetchMovies = async () => {
-    setLoading(true);
-    
-    // Fetch now showing movies
-    const { data: showing } = await supabase
-      .from('movies')
-      .select('*')
-      .eq('status', 'now_showing')
-      .order('rating', { ascending: false })
-      .limit(10);
-    
-    // Fetch coming soon movies
-    const { data: coming } = await supabase
-      .from('movies')
-      .select('*')
-      .eq('status', 'coming_soon')
-      .order('release_date', { ascending: true })
-      .limit(5);
-
-    if (showing && showing.length > 0) {
-      setFeatured(showing[0] as Movie);
-      setNowShowing(showing as Movie[]);
+    if (nowShowing.length > 0) {
+      setFeatured(nowShowing[0]);
     }
-    
-    if (coming) {
-      setComingSoon(coming as Movie[]);
-    }
-    
-    setLoading(false);
-  };
+  }, [nowShowing]);
+
+  const loading = loadingNowShowing || loadingComingSoon;
 
   return (
     <Layout>
@@ -54,10 +26,10 @@ export default function Index() {
       <section className="relative min-h-[80vh] flex items-center">
         {/* Background */}
         <div className="absolute inset-0 cinema-gradient">
-          {featured?.poster_url && (
+          {featured?.backdrop_url && (
             <div 
-              className="absolute inset-0 opacity-20 bg-cover bg-center"
-              style={{ backgroundImage: `url(${featured.poster_url})` }}
+              className="absolute inset-0 opacity-30 bg-cover bg-center"
+              style={{ backgroundImage: `url(${featured.backdrop_url})` }}
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-r from-background via-background/90 to-transparent" />
@@ -68,7 +40,7 @@ export default function Index() {
           <div className="max-w-2xl space-y-6 animate-fade-in">
             <div className="flex items-center gap-2 text-accent">
               <Sparkles className="h-5 w-5" />
-              <span className="text-sm font-medium tracking-wider uppercase">Featured Movie</span>
+              <span className="text-sm font-medium tracking-wider uppercase">Now Playing</span>
             </div>
             
             <h1 className="font-display text-5xl md:text-7xl lg:text-8xl leading-none tracking-wider">
@@ -88,7 +60,20 @@ export default function Index() {
                     <Clock className="h-5 w-5" />
                     {featured.duration_minutes} min
                   </span>
-                  <span>{featured.genre.join(' • ')}</span>
+                  {featured.release_date && (
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-5 w-5" />
+                      {format(parseISO(featured.release_date), 'MMM d, yyyy')}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {featured.genre.slice(0, 4).map((g) => (
+                    <span key={g} className="px-3 py-1 bg-secondary/50 rounded-full text-sm">
+                      {g}
+                    </span>
+                  ))}
                 </div>
                 
                 <p className="text-lg text-muted-foreground line-clamp-3">
@@ -97,7 +82,7 @@ export default function Index() {
                 
                 <div className="flex items-center gap-4 pt-4">
                   <Button size="lg" asChild className="cinema-glow">
-                    <Link to={`/movies/${featured.id}`}>
+                    <Link to={`/movies/${featured.tmdb_id}`}>
                       <Play className="mr-2 h-5 w-5" />
                       Book Tickets
                     </Link>
