@@ -1,16 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { SeatMap } from '@/components/booking/SeatMap';
+import { PaymentModal } from '@/components/booking/PaymentModal';
+import { ReservationTimer } from '@/components/booking/ReservationTimer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useMovieDetails } from '@/hooks/useTMDBMovies';
-import { supabase } from '@/integrations/supabase/client';
-import { SeatWithStatus, SeatCategory } from '@/types/database';
-import { ArrowLeft, Clock, Calendar, MapPin, Ticket, DollarSign, Star } from 'lucide-react';
+import { useRealtimeSeats } from '@/hooks/useRealtimeSeats';
+import { SeatWithStatus } from '@/types/database';
+import { ArrowLeft, Clock, Calendar, MapPin, Ticket, DollarSign, Star, AlertCircle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 interface ShowInfo {
@@ -22,48 +24,6 @@ interface ShowInfo {
   theater_name: string;
   theater_location: string;
   screen_name: string;
-}
-
-// Generate sample seats for a screen
-function generateSeats(): SeatWithStatus[] {
-  const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-  const seatsPerRow = 12;
-  const seats: SeatWithStatus[] = [];
-
-  rows.forEach((row, rowIdx) => {
-    for (let seatNum = 1; seatNum <= seatsPerRow; seatNum++) {
-      let category: SeatCategory = 'regular';
-      let priceMultiplier = 1.0;
-
-      // VIP rows (I, J - back rows)
-      if (rowIdx >= 8) {
-        category = 'vip';
-        priceMultiplier = 1.5;
-      }
-      // Premium rows (F, G, H - middle rows)
-      else if (rowIdx >= 5) {
-        category = 'premium';
-        priceMultiplier = 1.25;
-      }
-
-      // Randomly book some seats (20% chance)
-      const isBooked = Math.random() < 0.2;
-
-      seats.push({
-        id: `${row}${seatNum}`,
-        screen_id: 'sample-screen',
-        row_label: row,
-        seat_number: seatNum,
-        category,
-        price_multiplier: priceMultiplier,
-        created_at: new Date().toISOString(),
-        isBooked,
-        isSelected: false,
-      });
-    }
-  });
-
-  return seats;
 }
 
 // Parse show ID to get show info
@@ -109,46 +69,40 @@ export default function Booking() {
   const { toast } = useToast();
 
   const [showInfo, setShowInfo] = useState<ShowInfo | null>(null);
-  const [seats, setSeats] = useState<SeatWithStatus[]>([]);
-  const [selectedSeats, setSelectedSeats] = useState<SeatWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
-  const [booking, setBooking] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
 
   const { movie } = useMovieDetails(showInfo?.movie_id);
+
+  const {
+    seats,
+    selectedSeats,
+    reservationExpiry,
+    handleSeatClick,
+    reserveSeats,
+    completeBooking,
+    clearSelection,
+  } = useRealtimeSeats({
+    showId: showId || '',
+    screenId: 'screen-1',
+  });
 
   useEffect(() => {
     if (showId) {
       const info = parseShowId(showId);
       if (info) {
         setShowInfo(info);
-        setSeats(generateSeats());
       }
       setLoading(false);
     }
   }, [showId]);
 
-  const handleSeatClick = (seat: SeatWithStatus) => {
-    setSeats(prev =>
-      prev.map(s =>
-        s.id === seat.id ? { ...s, isSelected: !s.isSelected } : s
-      )
-    );
-
-    setSelectedSeats(prev => {
-      const exists = prev.find(s => s.id === seat.id);
-      if (exists) {
-        return prev.filter(s => s.id !== seat.id);
-      }
-      return [...prev, { ...seat, isSelected: true }];
-    });
-  };
-
-  const calculateTotal = () => {
+  const calculateTotal = useCallback(() => {
     if (!showInfo) return 0;
     return selectedSeats.reduce((total, seat) => {
       return total + (showInfo.base_price * seat.price_multiplier);
     }, 0);
-  };
+  }, [showInfo, selectedSeats]);
 
   const getSeatPrice = (seat: SeatWithStatus) => {
     if (!showInfo) return 0;
@@ -174,27 +128,40 @@ export default function Booking() {
       return;
     }
 
-    setBooking(true);
+    // Reserve seats first
+    const reserveResult = await reserveSeats();
+    
+    if (!reserveResult.success) {
+      toast({
+        title: 'Could not reserve seats',
+        description: reserveResult.message || 'Some seats may no longer be available',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-    try {
-      // Generate booking reference
-      const bookingRef = `BK${format(new Date(), 'yyyyMMdd')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // Show payment modal
+    setShowPayment(true);
+  };
 
-      // For demo purposes, show success directly
-      // In production, this would save to Supabase
-      
+  const handlePaymentComplete = async () => {
+    const total = calculateTotal();
+    const result = await completeBooking(total);
+
+    setShowPayment(false);
+
+    if (result.success && result.booking_reference) {
       toast({
         title: 'Booking confirmed!',
-        description: `Your booking reference is ${bookingRef}`,
+        description: `Your booking reference is ${result.booking_reference}`,
       });
 
-      // Navigate to confirmation with booking details in state
-      navigate(`/booking/confirmation/${bookingRef}`, {
+      navigate(`/booking/confirmation/${result.booking_id}`, {
         state: {
           booking: {
-            id: bookingRef,
-            booking_reference: bookingRef,
-            total_amount: calculateTotal(),
+            id: result.booking_id,
+            booking_reference: result.booking_reference,
+            total_amount: total,
             status: 'confirmed',
             created_at: new Date().toISOString(),
             movie: movie,
@@ -203,15 +170,22 @@ export default function Booking() {
           }
         }
       });
-    } catch (error: any) {
+    } else {
       toast({
         title: 'Booking failed',
-        description: error.message || 'Something went wrong',
+        description: result.message || 'Something went wrong',
         variant: 'destructive',
       });
-    } finally {
-      setBooking(false);
     }
+  };
+
+  const handleReservationExpiry = () => {
+    clearSelection();
+    toast({
+      title: 'Reservation expired',
+      description: 'Your seat reservation has expired. Please select seats again.',
+      variant: 'destructive',
+    });
   };
 
   if (loading) {
@@ -290,12 +264,31 @@ export default function Booking() {
           <div className="lg:col-span-2">
             <Card className="bg-card/80">
               <CardHeader>
-                <CardTitle className="font-display text-xl tracking-wide">SELECT YOUR SEATS</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Select up to 10 seats. Click on available seats to select them.
-                </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="font-display text-xl tracking-wide">SELECT YOUR SEATS</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Select up to 10 seats. Click on available seats to select them.
+                    </p>
+                  </div>
+                  {reservationExpiry && (
+                    <ReservationTimer
+                      expiryTime={reservationExpiry}
+                      onExpire={handleReservationExpiry}
+                    />
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
+                {/* Real-time indicator */}
+                <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                  </span>
+                  Live seat availability
+                </div>
+
                 {/* Price Legend */}
                 <div className="mb-6 p-4 bg-secondary/30 rounded-lg">
                   <h4 className="text-sm font-medium mb-3">Seat Prices</h4>
@@ -405,14 +398,15 @@ export default function Booking() {
                 <Button
                   className="w-full cinema-glow"
                   size="lg"
-                  disabled={selectedSeats.length === 0 || booking}
+                  disabled={selectedSeats.length === 0}
                   onClick={handleProceedToPayment}
                 >
-                  {booking ? 'Processing...' : 'Confirm Booking'}
+                  Proceed to Payment
                 </Button>
 
                 {!user && (
-                  <p className="text-xs text-muted-foreground text-center">
+                  <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
                     You'll need to sign in to complete your booking
                   </p>
                 )}
@@ -421,6 +415,15 @@ export default function Booking() {
           </div>
         </div>
       </div>
+
+      {/* Payment Modal */}
+      <PaymentModal
+        open={showPayment}
+        onClose={() => setShowPayment(false)}
+        onComplete={handlePaymentComplete}
+        amount={calculateTotal()}
+        seatCount={selectedSeats.length}
+      />
     </Layout>
   );
 }
