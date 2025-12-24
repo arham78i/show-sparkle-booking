@@ -3,8 +3,9 @@ import { useParams, useLocation, Link } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { CheckCircle, Calendar, Clock, MapPin, Ticket, Home, Film, Star, DollarSign } from 'lucide-react';
+import { CheckCircle, Calendar, Clock, MapPin, Ticket, Home, Film, Star } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { formatPrice } from '@/lib/currency';
 
 interface BookingDetails {
   id: string;
@@ -189,9 +190,8 @@ export default function BookingConfirmation() {
             {/* Total */}
             <div className="border-t border-border pt-4 flex justify-between items-center">
               <span className="text-lg font-medium">Total Paid</span>
-              <span className="font-display text-3xl text-accent flex items-center">
-                <DollarSign className="h-6 w-6" />
-                {booking.total_amount.toFixed(2)}
+              <span className="font-display text-3xl text-accent">
+                {formatPrice(booking.total_amount)}
               </span>
             </div>
           </CardContent>
