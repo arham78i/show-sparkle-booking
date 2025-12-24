@@ -21,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Ticket, Calendar, Clock, MapPin, ChevronRight, XCircle, RefreshCcw } from 'lucide-react';
 import { format, parseISO, differenceInHours } from 'date-fns';
+import { formatPrice } from '@/lib/currency';
 
 interface SeatData {
   id: string;
@@ -112,7 +113,7 @@ export default function MyBookings() {
           toast({
             title: 'Booking cancelled',
             description: result[0].refund_amount > 0 
-              ? `Refund of $${result[0].refund_amount.toFixed(2)} will be processed`
+              ? `Refund of ${formatPrice(result[0].refund_amount)} will be processed`
               : result[0].message,
           });
           fetchBookings();
@@ -237,7 +238,7 @@ export default function MyBookings() {
                           </div>
                           <Badge variant="outline" className={getStatusColor(booking.status)}>
                             {booking.status === 'cancelled' && booking.refund_amount && booking.refund_amount > 0 
-                              ? `Refunded $${booking.refund_amount.toFixed(2)}`
+                              ? `Refunded ${formatPrice(booking.refund_amount)}`
                               : booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                           </Badge>
                         </div>
@@ -274,7 +275,7 @@ export default function MyBookings() {
                             )}
                           </div>
                           <span className="font-semibold text-accent">
-                            ${booking.total_amount.toFixed(2)}
+                            {formatPrice(booking.total_amount)}
                           </span>
                         </div>
                       </div>
@@ -307,7 +308,7 @@ export default function MyBookings() {
                                     <p className="font-medium text-foreground">{refundInfo.message}</p>
                                     <p className="text-sm mt-1">
                                       Refund amount: <span className={refundInfo.refundAmount > 0 ? 'text-green-500' : 'text-destructive'}>
-                                        ${refundInfo.refundAmount.toFixed(2)}
+                                        {formatPrice(refundInfo.refundAmount)}
                                       </span>
                                     </p>
                                   </div>

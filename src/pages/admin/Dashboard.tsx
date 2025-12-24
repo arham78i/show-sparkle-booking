@@ -21,6 +21,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { format, subDays, parseISO } from 'date-fns';
+import { formatPrice } from '@/lib/currency';
 
 interface AnalyticsData {
   totalBookings: number;
@@ -200,7 +201,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Total Revenue</p>
-                    <p className="text-2xl font-bold">${analytics.totalRevenue.toFixed(2)}</p>
+                    <p className="text-2xl font-bold">{formatPrice(analytics.totalRevenue)}</p>
                   </div>
                   <div className="h-12 w-12 rounded-full bg-green-500/20 flex items-center justify-center">
                     <DollarSign className="h-6 w-6 text-green-500" />
@@ -228,7 +229,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Today's Revenue</p>
-                    <p className="text-2xl font-bold">${analytics.todayRevenue.toFixed(2)}</p>
+                    <p className="text-2xl font-bold">{formatPrice(analytics.todayRevenue)}</p>
                   </div>
                   <div className="h-12 w-12 rounded-full bg-accent/20 flex items-center justify-center">
                     <TrendingUp className="h-6 w-6 text-accent" />
@@ -297,7 +298,7 @@ export default function AdminDashboard() {
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-medium text-accent">${booking.total_amount.toFixed(2)}</p>
+                          <p className="font-medium text-accent">{formatPrice(booking.total_amount)}</p>
                           <p className="text-xs text-muted-foreground">
                             {format(parseISO(booking.created_at), 'MMM d, h:mm a')}
                           </p>
@@ -410,7 +411,7 @@ export default function AdminDashboard() {
                             {format(parseISO(`2000-01-01T${show.show_time}`), 'h:mm a')}
                           </p>
                         </div>
-                        <Badge variant="outline">${show.base_price.toFixed(2)}</Badge>
+                        <Badge variant="outline">{formatPrice(show.base_price)}</Badge>
                       </div>
                     ))}
                   </div>

@@ -10,8 +10,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useMovieDetails } from '@/hooks/useTMDBMovies';
 import { supabase } from '@/integrations/supabase/client';
 import { SeatWithStatus, SeatCategory } from '@/types/database';
-import { ArrowLeft, Clock, Calendar, MapPin, Ticket, DollarSign, Star, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Clock, Calendar, MapPin, Ticket, Star, AlertCircle, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { formatPrice } from '@/lib/currency';
 
 interface ShowInfo {
   id: string;
@@ -84,11 +85,11 @@ function parseShowId(showId: string): ShowInfo | null {
   const theater = theaters[theaterId] || theaters['1'];
   const formattedTime = time.slice(0, 2) + ':' + time.slice(2) + ':00';
 
-  // Price based on time
+  // Price based on time in PKR
   const hour = parseInt(time.slice(0, 2));
-  let basePrice = 12.99;
-  if (hour >= 18) basePrice = 16.99;
-  else if (hour >= 14) basePrice = 14.99;
+  let basePrice = 500; // Rs. 500 for morning shows
+  if (hour >= 18) basePrice = 800; // Rs. 800 for evening shows
+  else if (hour >= 14) basePrice = 650; // Rs. 650 for afternoon shows
 
   return {
     id: showId,
@@ -334,15 +335,15 @@ export default function Booking() {
                   <div className="flex flex-wrap gap-4 text-sm">
                     <span className="flex items-center gap-2">
                       <div className="w-4 h-4 rounded bg-seat-available/20 border-2 border-seat-available" />
-                      Regular: ${showInfo.base_price.toFixed(2)}
+                      Regular: {formatPrice(showInfo.base_price)}
                     </span>
                     <span className="flex items-center gap-2">
                       <div className="w-4 h-4 rounded bg-seat-premium/20 border-2 border-seat-premium" />
-                      Premium: ${(showInfo.base_price * 1.25).toFixed(2)}
+                      Premium: {formatPrice(showInfo.base_price * 1.25)}
                     </span>
                     <span className="flex items-center gap-2">
                       <div className="w-4 h-4 rounded bg-seat-vip/20 border-2 border-seat-vip" />
-                      VIP: ${(showInfo.base_price * 1.5).toFixed(2)}
+                      VIP: {formatPrice(showInfo.base_price * 1.5)}
                     </span>
                   </div>
                 </div>
@@ -417,7 +418,7 @@ export default function Booking() {
                               <span className="font-medium">{seat.row_label}{seat.seat_number}</span>
                               <span className="text-xs text-muted-foreground capitalize">({seat.category})</span>
                             </span>
-                            <span className="text-accent">${getSeatPrice(seat).toFixed(2)}</span>
+                            <span className="text-accent">{formatPrice(getSeatPrice(seat))}</span>
                           </div>
                         ))}
                     </div>
@@ -427,9 +428,8 @@ export default function Booking() {
                 <div className="border-t border-border pt-4">
                   <div className="flex justify-between text-lg font-semibold">
                     <span>Total</span>
-                    <span className="text-accent flex items-center">
-                      <DollarSign className="h-5 w-5" />
-                      {calculateTotal().toFixed(2)}
+                    <span className="text-accent">
+                      {formatPrice(calculateTotal())}
                     </span>
                   </div>
                 </div>

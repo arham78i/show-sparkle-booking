@@ -8,8 +8,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useMovieDetails } from '@/hooks/useTMDBMovies';
 import { supabase } from '@/integrations/supabase/client';
 import { Show, Screen, Theater } from '@/types/database';
-import { Clock, Star, Calendar, Play, MapPin, ChevronRight, DollarSign } from 'lucide-react';
+import { Clock, Star, Calendar, Play, MapPin, ChevronRight } from 'lucide-react';
 import { format, parseISO, addDays, isToday, isTomorrow } from 'date-fns';
+import { formatPrice } from '@/lib/currency';
 
 interface ShowWithDetails extends Show {
   screen: Screen & { theater: Theater };
@@ -264,9 +265,8 @@ export default function MovieDetails() {
                           >
                             <Link to={`/booking/${show.id}`}>
                               <span>{format(parseISO(`2000-01-01T${show.show_time}`), 'h:mm a')}</span>
-                              <span className="ml-2 text-xs text-accent group-hover:text-primary-foreground flex items-center">
-                                <DollarSign className="h-3 w-3" />
-                                {show.base_price.toFixed(2)}
+                              <span className="ml-2 text-xs text-accent group-hover:text-primary-foreground">
+                                {formatPrice(show.base_price)}
                               </span>
                               <ChevronRight className="ml-1 h-4 w-4" />
                             </Link>
