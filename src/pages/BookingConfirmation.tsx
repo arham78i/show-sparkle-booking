@@ -175,7 +175,13 @@ export default function BookingConfirmation() {
   const isCancelled = booking?.status === 'cancelled';
   const genres = useMemo(() => {
     const g: any = booking?.movie?.genre;
-    if (Array.isArray(g)) return g;
+    if (Array.isArray(g)) {
+      return g.map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && item.name) return String(item.name);
+        return '';
+      }).filter(Boolean);
+    }
     if (typeof g === 'string') return g.split(',').map((s) => s.trim()).filter(Boolean);
     return [] as string[];
   }, [booking]);
