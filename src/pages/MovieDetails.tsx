@@ -19,13 +19,13 @@ interface ShowWithDetails extends Show {
 // Sample shows generator for TMDB movies
 function generateSampleShows(movieId: string, selectedDate: string): ShowWithDetails[] {
   const theaters = [
-    { id: '1', name: 'CineMax Downtown', location: 'Main Street', city: 'New York' },
-    { id: '2', name: 'StarPlex Cinema', location: 'Mall Road', city: 'New York' },
-    { id: '3', name: 'AMC Theater', location: 'Broadway', city: 'New York' },
+    { id: '1', name: 'Nueplex Cinemas', location: 'Clifton', city: 'Karachi' },
+    { id: '2', name: 'Cinepax', location: 'Dolmen Mall', city: 'Karachi' },
+    { id: '3', name: 'Cue Cinema', location: 'Gulshan', city: 'Karachi' },
   ];
 
   const times = ['10:00', '13:30', '16:00', '19:00', '21:30'];
-  const prices = [12.99, 14.99, 16.99];
+  const prices = [500, 650, 800]; // PKR prices: morning, afternoon, evening
 
   const shows: ShowWithDetails[] = [];
 

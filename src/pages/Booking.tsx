@@ -77,9 +77,9 @@ function parseShowId(showId: string): ShowInfo | null {
   const time = parts[2];
 
   const theaters: Record<string, { name: string; location: string }> = {
-    '1': { name: 'CineMax Downtown', location: 'Main Street, New York' },
-    '2': { name: 'StarPlex Cinema', location: 'Mall Road, New York' },
-    '3': { name: 'AMC Theater', location: 'Broadway, New York' },
+    '1': { name: 'Nueplex Cinemas', location: 'Clifton, Karachi' },
+    '2': { name: 'Cinepax', location: 'Dolmen Mall, Karachi' },
+    '3': { name: 'Cue Cinema', location: 'Gulshan, Karachi' },
   };
 
   const theater = theaters[theaterId] || theaters['1'];
