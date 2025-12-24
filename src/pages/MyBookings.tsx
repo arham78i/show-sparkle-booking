@@ -244,10 +244,8 @@ export default function MyBookings() {
                             </p>
                           </div>
                           <Badge variant="outline" className={getStatusColor(booking.status)}>
-                            {booking.status === 'cancelled' 
-                              ? booking.refund_amount && booking.refund_amount > 0 
-                                ? `Refunded ${formatPrice(booking.refund_amount)}`
-                                : 'Cancelled - No Refund'
+                            {booking.status === 'cancelled'
+                              ? `Cancelled • Refund ${formatPrice(booking.refund_amount || 0)}`
                               : booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                           </Badge>
                         </div>

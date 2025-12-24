@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { CheckCircle, Calendar, Clock, MapPin, Ticket, Home, Film, Star } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatPrice } from '@/lib/currency';
@@ -13,10 +16,13 @@ interface BookingDetails {
   total_amount: number;
   status: string;
   created_at: string;
+  cancelled_at?: string | null;
+  refund_amount?: number | null;
   movie: {
     title: string;
     poster_url: string | null;
-    genre: string[];
+    // Stored as array in some places and string in others; keep flexible at runtime
+    genre: any;
     duration_minutes: number;
     rating: number | null;
   };
@@ -39,14 +45,102 @@ interface BookingDetails {
 export default function BookingConfirmation() {
   const { bookingId } = useParams<{ bookingId: string }>();
   const location = useLocation();
+  const { user } = useAuth();
+
   const [booking, setBooking] = useState<BookingDetails | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const stateBooking = useMemo(() => {
+    return (location.state as any)?.booking as BookingDetails | undefined;
+  }, [location.state]);
 
   useEffect(() => {
-    // Get booking from location state (passed from Booking page)
-    if (location.state?.booking) {
-      setBooking(location.state.booking);
-    }
-  }, [location]);
+    if (stateBooking) setBooking(stateBooking);
+  }, [stateBooking]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const fetchBooking = async () => {
+      if (!bookingId) return;
+      if (!user && !stateBooking) return; // can't read protected booking without auth
+
+      setLoading(true);
+      setLoadError(null);
+
+      const { data, error } = await supabase
+        .from('app_bookings')
+        .select('*')
+        .eq('id', bookingId)
+        .maybeSingle();
+
+      if (ignore) return;
+
+      if (error) {
+        setLoadError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!data) {
+        setLoading(false);
+        return;
+      }
+
+      const seatsRaw = Array.isArray((data as any).seats) ? ((data as any).seats as any[]) : [];
+
+      const mapped: BookingDetails = {
+        id: data.id,
+        booking_reference: (data as any).booking_reference,
+        total_amount: Number((data as any).total_amount ?? 0),
+        status: (data as any).status,
+        created_at: (data as any).created_at,
+        cancelled_at: (data as any).cancelled_at,
+        refund_amount: Number((data as any).refund_amount ?? 0),
+        movie: {
+          title: (data as any).movie_title,
+          poster_url: (data as any).movie_poster_url,
+          genre: stateBooking?.movie?.genre ?? [],
+          duration_minutes: stateBooking?.movie?.duration_minutes ?? 0,
+          rating: stateBooking?.movie?.rating ?? null,
+        },
+        show: {
+          show_date: (data as any).show_date,
+          show_time: (data as any).show_time,
+          theater_name: (data as any).theater_name,
+          theater_location: (data as any).theater_location ?? '',
+          screen_name: (data as any).screen_name,
+        },
+        seats: seatsRaw.map((s) => ({
+          id: s.id ?? `${s.row_label ?? ''}${s.seat_number ?? ''}`,
+          row_label: String(s.row_label ?? ''),
+          seat_number: Number(s.seat_number ?? 0),
+          category: String(s.category ?? 'regular'),
+          price_multiplier: Number(s.price_multiplier ?? 1),
+        })),
+      };
+
+      setBooking((prev) => {
+        if (!prev) return mapped;
+        return {
+          ...mapped,
+          // keep richer movie/seats if we already have them from state
+          movie: prev.movie?.title ? prev.movie : mapped.movie,
+          seats: prev.seats?.length ? prev.seats : mapped.seats,
+          show: prev.show ? prev.show : mapped.show,
+        };
+      });
+
+      setLoading(false);
+    };
+
+    fetchBooking();
+
+    return () => {
+      ignore = true;
+    };
+  }, [bookingId, user, stateBooking]);
 
   if (!booking) {
     return (
@@ -78,6 +172,14 @@ export default function BookingConfirmation() {
     );
   }
 
+  const isCancelled = booking?.status === 'cancelled';
+  const genres = useMemo(() => {
+    const g: any = booking?.movie?.genre;
+    if (Array.isArray(g)) return g;
+    if (typeof g === 'string') return g.split(',').map((s) => s.trim()).filter(Boolean);
+    return [] as string[];
+  }, [booking]);
+
   return (
     <Layout>
       <div className="container mx-auto px-4 py-16 max-w-2xl">
@@ -87,26 +189,37 @@ export default function BookingConfirmation() {
             <CheckCircle className="h-10 w-10 text-seat-available" />
           </div>
           <h1 className="font-display text-4xl md:text-5xl tracking-wider mb-2">
-            BOOKING CONFIRMED!
+            {isCancelled ? 'BOOKING CANCELLED' : 'BOOKING CONFIRMED!'}
           </h1>
           <p className="text-muted-foreground">
-            Your tickets have been booked successfully
+            {isCancelled ? 'Your booking was cancelled and refund details are shown below.' : 'Your tickets have been booked successfully'}
           </p>
+          {loadError && (
+            <p className="text-sm text-destructive mt-3">{loadError}</p>
+          )}
+          {loading && (
+            <p className="text-sm text-muted-foreground mt-2">Refreshing booking status…</p>
+          )}
         </div>
 
         {/* Ticket Card */}
-        <Card className="bg-card/80 overflow-hidden">
-          <div className="bg-gradient-to-r from-primary to-primary/80 p-6 text-primary-foreground">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm opacity-80">Booking Reference</p>
-                <p className="font-display text-2xl tracking-wider">
-                  {booking.booking_reference}
-                </p>
+          <Card className="bg-card/80 overflow-hidden">
+            <div className="bg-gradient-to-r from-primary to-primary/80 p-6 text-primary-foreground">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm opacity-80">Booking Reference</p>
+                  <p className="font-display text-2xl tracking-wider">
+                    {booking.booking_reference}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline" className="border-primary-foreground/30 text-primary-foreground">
+                    {booking.status.toUpperCase()}
+                  </Badge>
+                  <Ticket className="h-8 w-8 opacity-60" />
+                </div>
               </div>
-              <Ticket className="h-8 w-8 opacity-60" />
             </div>
-          </div>
 
           <CardContent className="p-6 space-y-6">
             {/* Movie Info */}
@@ -123,7 +236,12 @@ export default function BookingConfirmation() {
                   {booking.movie.title}
                 </h2>
                 <p className="text-muted-foreground text-sm flex items-center gap-2">
-                  {booking.movie.genre.slice(0, 3).join(' • ')} • {booking.movie.duration_minutes} min
+                  {genres.length > 0 && genres.slice(0, 3).join(' • ')}
+                  {booking.movie.duration_minutes > 0 && (
+                    <>
+                      {genres.length > 0 ? ' • ' : ''}{booking.movie.duration_minutes} min
+                    </>
+                  )}
                   {booking.movie.rating && (
                     <span className="flex items-center gap-1 text-accent">
                       <Star className="h-3 w-3 fill-accent" />
@@ -187,12 +305,23 @@ export default function BookingConfirmation() {
               </div>
             </div>
 
-            {/* Total */}
-            <div className="border-t border-border pt-4 flex justify-between items-center">
-              <span className="text-lg font-medium">Total Paid</span>
-              <span className="font-display text-3xl text-accent">
-                {formatPrice(booking.total_amount)}
-              </span>
+            {/* Total / Refund */}
+            <div className="border-t border-border pt-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-medium">Total Paid</span>
+                <span className="font-display text-3xl text-accent">
+                  {formatPrice(booking.total_amount)}
+                </span>
+              </div>
+
+              {booking.status === 'cancelled' && (
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-medium">Refund Amount</span>
+                  <span className={((booking.refund_amount || 0) > 0) ? 'font-display text-2xl text-seat-available' : 'font-display text-2xl text-destructive'}>
+                    {formatPrice(booking.refund_amount || 0)}
+                  </span>
+                </div>
+              )}
             </div>
           </CardContent>
 
