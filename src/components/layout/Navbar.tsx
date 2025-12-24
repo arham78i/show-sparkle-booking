@@ -47,6 +47,15 @@ export function Navbar() {
             >
               Theaters
             </Link>
+            {user && (
+              <Link 
+                to="/bookings" 
+                className="text-muted-foreground hover:text-foreground transition-colors font-medium flex items-center gap-1"
+              >
+                <Ticket className="h-4 w-4" />
+                My Bookings
+              </Link>
+            )}
           </div>
 
           {/* Right Side */}
