@@ -142,6 +142,23 @@ export default function BookingConfirmation() {
     };
   }, [bookingId, user, stateBooking]);
 
+  const isCancelled = booking?.status === 'cancelled';
+
+  const genres = useMemo(() => {
+    const g: any = booking?.movie?.genre;
+    if (Array.isArray(g)) {
+      return g
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          if (item && typeof item === 'object' && (item as any).name) return String((item as any).name);
+          return '';
+        })
+        .filter(Boolean);
+    }
+    if (typeof g === 'string') return g.split(',').map((s) => s.trim()).filter(Boolean);
+    return [] as string[];
+  }, [booking]);
+
   if (!booking) {
     return (
       <Layout>
@@ -171,20 +188,6 @@ export default function BookingConfirmation() {
       </Layout>
     );
   }
-
-  const isCancelled = booking?.status === 'cancelled';
-  const genres = useMemo(() => {
-    const g: any = booking?.movie?.genre;
-    if (Array.isArray(g)) {
-      return g.map((item) => {
-        if (typeof item === 'string') return item;
-        if (item && typeof item === 'object' && item.name) return String(item.name);
-        return '';
-      }).filter(Boolean);
-    }
-    if (typeof g === 'string') return g.split(',').map((s) => s.trim()).filter(Boolean);
-    return [] as string[];
-  }, [booking]);
 
   return (
     <Layout>
