@@ -237,8 +237,10 @@ export default function MyBookings() {
                             </p>
                           </div>
                           <Badge variant="outline" className={getStatusColor(booking.status)}>
-                            {booking.status === 'cancelled' && booking.refund_amount && booking.refund_amount > 0 
-                              ? `Refunded ${formatPrice(booking.refund_amount)}`
+                            {booking.status === 'cancelled' 
+                              ? booking.refund_amount && booking.refund_amount > 0 
+                                ? `Refunded ${formatPrice(booking.refund_amount)}`
+                                : 'Cancelled - No Refund'
                               : booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                           </Badge>
                         </div>
@@ -278,6 +280,27 @@ export default function MyBookings() {
                             {formatPrice(booking.total_amount)}
                           </span>
                         </div>
+
+                        {/* Refund Details for Cancelled Bookings */}
+                        {booking.status === 'cancelled' && (
+                          <div className="mt-3 p-3 bg-destructive/10 rounded-lg border border-destructive/20">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">Booking Amount:</span>
+                              <span>{formatPrice(booking.total_amount)}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm mt-1">
+                              <span className="text-muted-foreground">Refund Amount:</span>
+                              <span className={booking.refund_amount && booking.refund_amount > 0 ? 'text-green-500 font-medium' : 'text-destructive'}>
+                                {formatPrice(booking.refund_amount || 0)}
+                              </span>
+                            </div>
+                            {booking.cancelled_at && (
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Cancelled on {format(parseISO(booking.cancelled_at), 'MMM d, yyyy h:mm a')}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Actions */}
