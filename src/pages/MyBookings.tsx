@@ -110,18 +110,10 @@ export default function MyBookings() {
       
       if (result && result[0]) {
         if (result[0].success) {
+          const refundAmt = result[0].refund_amount || 0;
           toast({
             title: '✓ Booking Cancelled Successfully',
-            description: (
-              <div className="space-y-1">
-                <p>{result[0].message}</p>
-                <p className="font-medium">
-                  Refund Amount: <span className={result[0].refund_amount > 0 ? 'text-green-500' : 'text-destructive'}>
-                    {formatPrice(result[0].refund_amount)}
-                  </span>
-                </p>
-              </div>
-            ),
+            description: `${result[0].message} • Refund Amount: ${formatPrice(refundAmt)}`,
           });
           fetchBookings();
         } else {
