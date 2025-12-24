@@ -5,12 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMovieDetails } from '@/hooks/useTMDBMovies';
+import { useMovieDetails, useSimilarMovies } from '@/hooks/useTMDBMovies';
 import { supabase } from '@/integrations/supabase/client';
 import { Show, Screen, Theater } from '@/types/database';
 import { Clock, Star, Calendar, Play, MapPin, ChevronRight } from 'lucide-react';
 import { format, parseISO, addDays, isToday, isTomorrow } from 'date-fns';
 import { formatPrice } from '@/lib/currency';
+import { MovieCard } from '@/components/movies/MovieCard';
 
 interface ShowWithDetails extends Show {
   screen: Screen & { theater: Theater };
@@ -68,6 +69,7 @@ function generateSampleShows(movieId: string, selectedDate: string): ShowWithDet
 export default function MovieDetails() {
   const { id } = useParams<{ id: string }>();
   const { movie, loading } = useMovieDetails(id);
+  const { movies: similarMovies, loading: similarLoading } = useSimilarMovies(id);
   const [shows, setShows] = useState<ShowWithDetails[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
@@ -299,6 +301,29 @@ export default function MovieDetails() {
             <Button asChild>
               <Link to="/movies">Browse Other Movies</Link>
             </Button>
+          </div>
+        </section>
+      )}
+
+      {/* Similar Movies Section */}
+      {similarMovies.length > 0 && (
+        <section className="py-12 bg-secondary/20">
+          <div className="container mx-auto px-4">
+            <h2 className="font-display text-3xl tracking-wider mb-8">YOU MAY ALSO LIKE</h2>
+            
+            {similarLoading ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="aspect-[2/3] rounded-xl" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {similarMovies.map((similarMovie) => (
+                  <MovieCard key={similarMovie.id} movie={similarMovie} />
+                ))}
+              </div>
+            )}
           </div>
         </section>
       )}

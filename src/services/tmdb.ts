@@ -99,6 +99,18 @@ export async function searchMovies(query: string, page = 1): Promise<{ results: 
   return fetchTMDB('/search/movie', { query, page: page.toString() });
 }
 
+export async function getSimilarMovies(movieId: number): Promise<{ results: TMDBMovie[]; total_pages: number }> {
+  return fetchTMDB(`/movie/${movieId}/similar`);
+}
+
+export async function getMoviesByGenre(genreIds: number[], page = 1): Promise<{ results: TMDBMovie[]; total_pages: number }> {
+  return fetchTMDB('/discover/movie', { 
+    with_genres: genreIds.join(','), 
+    page: page.toString(),
+    sort_by: 'popularity.desc'
+  });
+}
+
 // Convert TMDB movie to our app's Movie format
 export function tmdbToAppMovie(tmdb: TMDBMovie, status: 'now_showing' | 'coming_soon' = 'now_showing') {
   const trailer = tmdb.videos?.results?.find(v => v.site === 'YouTube' && v.type === 'Trailer');

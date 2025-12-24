@@ -4,6 +4,7 @@ import {
   getUpcomingMovies,
   getMovieDetails,
   searchMovies,
+  getSimilarMovies,
   tmdbToAppMovie,
   getGenreNames,
   getPosterUrl,
@@ -190,6 +191,37 @@ export function useAllMovies(statusFilter?: 'now_showing' | 'coming_soon') {
     }
     fetchMovies();
   }, [statusFilter]);
+
+  return { movies, loading, error };
+}
+
+export function useSimilarMovies(tmdbId: string | undefined) {
+  const [movies, setMovies] = useState<AppMovie[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    async function fetchSimilarMovies() {
+      if (!tmdbId) {
+        setLoading(false);
+        return;
+      }
+      try {
+        setLoading(true);
+        const data = await getSimilarMovies(parseInt(tmdbId));
+        const appMovies = data.results.slice(0, 6).map(m => ({
+          ...tmdbToAppMovie(m, new Date(m.release_date) > new Date() ? 'coming_soon' : 'now_showing'),
+          genre: getGenreNames(m.genre_ids),
+        }));
+        setMovies(appMovies);
+      } catch (err) {
+        setError(err as Error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSimilarMovies();
+  }, [tmdbId]);
 
   return { movies, loading, error };
 }
