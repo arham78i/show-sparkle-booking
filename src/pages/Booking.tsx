@@ -365,7 +365,7 @@ export default function Booking() {
             created_at: new Date().toISOString(),
             movie: movie,
             show: showInfo,
-            seats: selectedSeats,
+            seats: seatsData, // Pass seatsData which includes passenger_name
           }
         }
       });
