@@ -337,7 +337,7 @@ export default function BookingConfirmation() {
               </Link>
             </Button>
             <Button variant="outline" asChild>
-              <Link to="/">
+              <Link to="/home">
                 <Home className="mr-2 h-4 w-4" />
                 Go Home
               </Link>
@@ -562,7 +562,7 @@ export default function BookingConfirmation() {
             </Link>
           </Button>
           <Button variant="ghost" asChild className="flex-1">
-            <Link to="/">
+            <Link to="/home">
               <Home className="mr-2 h-4 w-4" />
               Go Home
             </Link>

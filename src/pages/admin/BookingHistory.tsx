@@ -361,7 +361,7 @@ export default function AdminBookingHistory() {
             You don't have permission to access this page.
           </p>
           <Button asChild>
-            <Link to="/">Go Home</Link>
+            <Link to="/home">Go Home</Link>
           </Button>
         </div>
       </Layout>
