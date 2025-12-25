@@ -5,12 +5,14 @@ import { SeatMap } from '@/components/booking/SeatMap';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useMovieDetails } from '@/hooks/useTMDBMovies';
 import { supabase } from '@/integrations/supabase/client';
 import { SeatWithStatus, SeatCategory } from '@/types/database';
-import { ArrowLeft, Clock, Calendar, MapPin, Ticket, Star, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Clock, Calendar, MapPin, Ticket, Star, AlertCircle, Loader2, RefreshCw, User } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatPrice } from '@/lib/currency';
 
@@ -115,6 +117,7 @@ export default function Booking() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [booking, setBooking] = useState(false);
+  const [passengerNames, setPassengerNames] = useState<Record<string, string>>({});
   const refreshIntervalRef = useRef<number | null>(null);
 
   const { movie } = useMovieDetails(showInfo?.movie_id);
@@ -206,11 +209,28 @@ export default function Booking() {
     setSelectedSeats(prev => {
       const exists = prev.find(s => s.id === seat.id);
       if (exists) {
+        // Remove passenger name when deselecting seat
+        setPassengerNames(names => {
+          const updated = { ...names };
+          delete updated[seat.id];
+          return updated;
+        });
         return prev.filter(s => s.id !== seat.id);
       }
       return [...prev, { ...seat, isSelected: true }];
     });
   };
+
+  const handlePassengerNameChange = (seatId: string, name: string) => {
+    setPassengerNames(prev => ({
+      ...prev,
+      [seatId]: name,
+    }));
+  };
+
+  const allPassengerNamesEntered = selectedSeats.every(
+    seat => passengerNames[seat.id]?.trim()
+  );
 
   const calculateTotal = useCallback(() => {
     if (!showInfo) return 0;
@@ -254,6 +274,17 @@ export default function Booking() {
       return;
     }
 
+    // Validate passenger names
+    const missingNames = selectedSeats.filter(seat => !passengerNames[seat.id]?.trim());
+    if (missingNames.length > 0) {
+      toast({
+        title: 'Passenger names required',
+        description: `Please enter names for all ${selectedSeats.length} passenger(s)`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!showInfo) return;
 
     setBooking(true);
@@ -261,13 +292,14 @@ export default function Booking() {
     try {
       const total = calculateTotal();
 
-      // Prepare seats data for JSONB storage
+      // Prepare seats data for JSONB storage (with passenger names)
       const seatsData = selectedSeats.map(seat => ({
         id: seat.id,
         row_label: seat.row_label,
         seat_number: seat.seat_number,
         category: seat.category,
         price: getSeatPrice(seat),
+        passenger_name: passengerNames[seat.id]?.trim() || '',
       }));
 
       // Use atomic booking function to prevent double-booking
@@ -514,24 +546,41 @@ export default function Booking() {
                 </div>
 
                 <div className="border-t border-border pt-4">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-muted-foreground">Selected Seats</span>
-                    <span>{selectedSeats.length}</span>
+                  <div className="flex justify-between text-sm mb-3">
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <User className="h-4 w-4" />
+                      Passengers ({selectedSeats.length})
+                    </span>
                   </div>
                   {selectedSeats.length > 0 && (
-                    <div className="space-y-2 mb-4">
+                    <div className="space-y-3 mb-4">
                       {selectedSeats
                         .sort((a, b) => a.row_label.localeCompare(b.row_label) || a.seat_number - b.seat_number)
-                        .map(seat => (
+                        .map((seat, idx) => (
                           <div
                             key={seat.id}
-                            className="flex justify-between items-center text-sm bg-secondary/30 px-3 py-2 rounded"
+                            className="bg-secondary/30 px-3 py-3 rounded space-y-2"
                           >
-                            <span className="flex items-center gap-2">
-                              <span className="font-medium">{seat.row_label}{seat.seat_number}</span>
-                              <span className="text-xs text-muted-foreground capitalize">({seat.category})</span>
-                            </span>
-                            <span className="text-accent">{formatPrice(getSeatPrice(seat))}</span>
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="flex items-center gap-2">
+                                <span className="font-medium">{seat.row_label}{seat.seat_number}</span>
+                                <span className="text-xs text-muted-foreground capitalize">({seat.category})</span>
+                              </span>
+                              <span className="text-accent">{formatPrice(getSeatPrice(seat))}</span>
+                            </div>
+                            <div>
+                              <Label htmlFor={`passenger-${seat.id}`} className="text-xs text-muted-foreground">
+                                Passenger {idx + 1} Name
+                              </Label>
+                              <Input
+                                id={`passenger-${seat.id}`}
+                                placeholder="Enter passenger name"
+                                value={passengerNames[seat.id] || ''}
+                                onChange={(e) => handlePassengerNameChange(seat.id, e.target.value)}
+                                className="mt-1 h-8 text-sm bg-background/50"
+                                maxLength={50}
+                              />
+                            </div>
                           </div>
                         ))}
                     </div>
@@ -550,7 +599,7 @@ export default function Booking() {
                 <Button
                   className="w-full cinema-glow"
                   size="lg"
-                  disabled={selectedSeats.length === 0 || booking || authLoading}
+                  disabled={selectedSeats.length === 0 || !allPassengerNamesEntered || booking || authLoading}
                   onClick={handleBookTicket}
                 >
                   {booking ? (
@@ -559,9 +608,16 @@ export default function Booking() {
                       Booking...
                     </>
                   ) : (
-                    'Book Ticket'
+                    `Book ${selectedSeats.length} Ticket${selectedSeats.length !== 1 ? 's' : ''}`
                   )}
                 </Button>
+
+                {selectedSeats.length > 0 && !allPassengerNamesEntered && (
+                  <p className="text-xs text-amber-500 text-center flex items-center justify-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    Enter names for all passengers to continue
+                  </p>
+                )}
 
                 {!session && (
                   <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
