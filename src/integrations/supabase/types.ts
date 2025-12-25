@@ -19,7 +19,11 @@ export type Database = {
           booking_reference: string
           cancelled_at: string | null
           created_at: string
+          guest_email: string | null
+          guest_name: string | null
+          guest_phone: string | null
           id: string
+          is_guest_booking: boolean | null
           movie_poster_url: string | null
           movie_title: string
           refund_amount: number | null
@@ -33,13 +37,17 @@ export type Database = {
           tmdb_movie_id: string
           total_amount: number
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           booking_reference: string
           cancelled_at?: string | null
           created_at?: string
+          guest_email?: string | null
+          guest_name?: string | null
+          guest_phone?: string | null
           id?: string
+          is_guest_booking?: boolean | null
           movie_poster_url?: string | null
           movie_title: string
           refund_amount?: number | null
@@ -53,13 +61,17 @@ export type Database = {
           tmdb_movie_id: string
           total_amount: number
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           booking_reference?: string
           cancelled_at?: string | null
           created_at?: string
+          guest_email?: string | null
+          guest_name?: string | null
+          guest_phone?: string | null
           id?: string
+          is_guest_booking?: boolean | null
           movie_poster_url?: string | null
           movie_title?: string
           refund_amount?: number | null
@@ -73,7 +85,7 @@ export type Database = {
           tmdb_movie_id?: string
           total_amount?: number
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -541,6 +553,27 @@ export type Database = {
         Returns: {
           booking_id: string
           booking_reference: string
+        }[]
+      }
+      complete_guest_booking: {
+        Args: {
+          _guest_email: string
+          _guest_name: string
+          _guest_phone: string
+          _movie_poster_url: string
+          _movie_title: string
+          _screen_name: string
+          _seats: Json
+          _show_date: string
+          _show_time: string
+          _theater_location: string
+          _theater_name: string
+          _tmdb_movie_id: string
+          _total_amount: number
+        }
+        Returns: {
+          booking_id: string
+          booking_ref: string
         }[]
       }
       generate_booking_reference: { Args: never; Returns: string }
