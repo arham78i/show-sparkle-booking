@@ -68,12 +68,11 @@ export default function CheckBooking() {
     setBooking(null);
 
     try {
-      // Search in app_bookings table by booking reference
+      // Use the database function to lookup booking by reference
       const { data: bookingData, error } = await supabase
-        .from('app_bookings')
-        .select('*')
-        .eq('booking_reference', referenceNumber.trim().toUpperCase())
-        .maybeSingle();
+        .rpc('lookup_booking_by_reference', {
+          _booking_reference: referenceNumber.trim()
+        });
 
       if (error) {
         console.error('Error fetching booking:', error);
@@ -82,41 +81,35 @@ export default function CheckBooking() {
         return;
       }
 
-      if (!bookingData) {
+      if (!bookingData || bookingData.length === 0) {
         setBooking(null);
         setLoading(false);
         return;
       }
 
-      // Get customer profile info
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('user_id', bookingData.user_id)
-        .maybeSingle();
-
-      const seats = Array.isArray(bookingData.seats) 
-        ? bookingData.seats as unknown as SeatData[]
+      const result = bookingData[0];
+      const seats = Array.isArray(result.seats) 
+        ? result.seats as unknown as SeatData[]
         : [];
 
       setBooking({
-        id: bookingData.id,
-        booking_reference: bookingData.booking_reference,
-        movie_title: bookingData.movie_title,
-        movie_poster_url: bookingData.movie_poster_url,
-        theater_name: bookingData.theater_name,
-        theater_location: bookingData.theater_location,
-        screen_name: bookingData.screen_name,
-        show_date: bookingData.show_date,
-        show_time: bookingData.show_time,
+        id: result.id,
+        booking_reference: result.booking_reference,
+        movie_title: result.movie_title,
+        movie_poster_url: result.movie_poster_url,
+        theater_name: result.theater_name,
+        theater_location: result.theater_location,
+        screen_name: result.screen_name,
+        show_date: result.show_date,
+        show_time: result.show_time,
         seats,
-        total_amount: bookingData.total_amount,
-        status: bookingData.status,
-        created_at: bookingData.created_at,
-        cancelled_at: bookingData.cancelled_at,
-        refund_amount: bookingData.refund_amount,
-        user_id: bookingData.user_id,
-        customer_name: profile?.full_name || null,
+        total_amount: result.total_amount,
+        status: result.status,
+        created_at: result.created_at,
+        cancelled_at: result.cancelled_at,
+        refund_amount: result.refund_amount,
+        user_id: '',
+        customer_name: result.customer_name,
       });
     } catch (err) {
       console.error('Error:', err);

@@ -533,6 +533,27 @@ export type Database = {
         }
         Returns: boolean
       }
+      lookup_booking_by_reference: {
+        Args: { _booking_reference: string }
+        Returns: {
+          booking_reference: string
+          cancelled_at: string
+          created_at: string
+          customer_name: string
+          id: string
+          movie_poster_url: string
+          movie_title: string
+          refund_amount: number
+          screen_name: string
+          seats: Json
+          show_date: string
+          show_time: string
+          status: string
+          theater_location: string
+          theater_name: string
+          total_amount: number
+        }[]
+      }
       reserve_seats: {
         Args: { _seat_ids: string[]; _show_id: string; _user_id: string }
         Returns: {
