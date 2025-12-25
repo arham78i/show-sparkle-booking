@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle, Calendar, Clock, MapPin, Ticket, Home, Film, Star } from 'lucide-react';
+import { CheckCircle, Calendar, Clock, MapPin, Ticket, Home, Film, Star, User } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatPrice } from '@/lib/currency';
 
@@ -39,6 +39,8 @@ interface BookingDetails {
     seat_number: number;
     category: string;
     price_multiplier: number;
+    passenger_name?: string;
+    price?: number;
   }>;
 }
 
@@ -118,6 +120,8 @@ export default function BookingConfirmation() {
           seat_number: Number(s.seat_number ?? 0),
           category: String(s.category ?? 'regular'),
           price_multiplier: Number(s.price_multiplier ?? 1),
+          passenger_name: s.passenger_name ?? '',
+          price: Number(s.price ?? 0),
         })),
       };
 
@@ -293,23 +297,38 @@ export default function BookingConfirmation() {
               </div>
             </div>
 
-            {/* Seats */}
+            {/* Passengers & Seats */}
             <div className="border-t border-border pt-4">
-              <p className="text-sm text-muted-foreground mb-2">Seats ({booking.seats.length})</p>
-              <div className="flex flex-wrap gap-2">
+              <p className="text-sm text-muted-foreground mb-3 flex items-center gap-1">
+                <User className="h-4 w-4" />
+                Passengers ({booking.seats.length})
+              </p>
+              <div className="space-y-2">
                 {booking.seats
                   .sort((a, b) => 
                     a.row_label.localeCompare(b.row_label) || 
                     a.seat_number - b.seat_number
                   )
-                  .map((seat) => (
-                    <span
+                  .map((seat, idx) => (
+                    <div
                       key={seat.id}
-                      className="px-3 py-1 bg-accent/20 text-accent rounded-full text-sm font-medium"
+                      className="flex items-center justify-between bg-secondary/30 px-3 py-2 rounded-lg"
                     >
-                      {seat.row_label}{seat.seat_number}
-                      <span className="text-xs ml-1 opacity-70 capitalize">({seat.category})</span>
-                    </span>
+                      <div className="flex items-center gap-3">
+                        <span className="px-2 py-1 bg-accent/20 text-accent rounded text-sm font-medium">
+                          {seat.row_label}{seat.seat_number}
+                        </span>
+                        <div>
+                          <p className="font-medium text-sm">
+                            {seat.passenger_name || `Passenger ${idx + 1}`}
+                          </p>
+                          <p className="text-xs text-muted-foreground capitalize">{seat.category}</p>
+                        </div>
+                      </div>
+                      {seat.price ? (
+                        <span className="text-sm text-accent">{formatPrice(seat.price)}</span>
+                      ) : null}
+                    </div>
                   ))}
               </div>
             </div>
