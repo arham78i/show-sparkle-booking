@@ -527,7 +527,7 @@ export type Database = {
         }
         Returns: {
           booking_id: string
-          booking_reference: string
+          booking_ref: string
         }[]
       }
       complete_booking: {

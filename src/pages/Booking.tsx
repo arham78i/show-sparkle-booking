@@ -288,24 +288,24 @@ export default function Booking() {
         throw bookingError;
       }
 
-      const result = bookingResult as { booking_id: string; booking_reference: string }[];
+      const result = bookingResult as { booking_id: string; booking_ref: string }[];
       
       if (!result || result.length === 0) {
         throw new Error('Booking failed');
       }
 
-      const { booking_id, booking_reference } = result[0];
+      const { booking_id, booking_ref } = result[0];
 
       toast({
         title: 'Booking confirmed!',
-        description: `Your booking reference is ${booking_reference}`,
+        description: `Your booking reference is ${booking_ref}`,
       });
 
       navigate(`/booking/confirmation/${booking_id}`, {
         state: {
           booking: {
             id: booking_id,
-            booking_reference: booking_reference,
+            booking_reference: booking_ref,
             total_amount: total,
             status: 'confirmed',
             created_at: new Date().toISOString(),
