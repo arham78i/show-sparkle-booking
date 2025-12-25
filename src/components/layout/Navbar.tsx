@@ -47,6 +47,13 @@ export function Navbar() {
             >
               Theaters
             </Link>
+            <Link 
+              to="/check-booking" 
+              className="text-muted-foreground hover:text-foreground transition-colors font-medium flex items-center gap-1"
+            >
+              <Search className="h-4 w-4" />
+              Check Booking
+            </Link>
             {user && (
               <Link 
                 to="/bookings" 
