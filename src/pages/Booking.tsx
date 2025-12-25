@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { SeatMap } from '@/components/booking/SeatMap';
@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useMovieDetails } from '@/hooks/useTMDBMovies';
 import { supabase } from '@/integrations/supabase/client';
 import { SeatWithStatus, SeatCategory } from '@/types/database';
-import { ArrowLeft, Clock, Calendar, MapPin, Ticket, Star, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Clock, Calendar, MapPin, Ticket, Star, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatPrice } from '@/lib/currency';
 
@@ -26,7 +26,7 @@ interface ShowInfo {
 }
 
 // Generate sample seats for a screen
-function generateSeats(): SeatWithStatus[] {
+function generateSeats(bookedSeatIds: string[] = []): SeatWithStatus[] {
   const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
   const seatsPerRow = 12;
   const seats: SeatWithStatus[] = [];
@@ -47,11 +47,11 @@ function generateSeats(): SeatWithStatus[] {
         priceMultiplier = 1.25;
       }
 
-      // Randomly book some seats (15% chance)
-      const isBooked = Math.random() < 0.15;
+      const seatId = `${row}${seatNum}`;
+      const isBooked = bookedSeatIds.includes(seatId);
 
       seats.push({
-        id: `${row}${seatNum}`,
+        id: seatId,
         screen_id: 'sample-screen',
         row_label: row,
         seat_number: seatNum,
@@ -113,20 +113,86 @@ export default function Booking() {
   const [seats, setSeats] = useState<SeatWithStatus[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<SeatWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [booking, setBooking] = useState(false);
+  const refreshIntervalRef = useRef<number | null>(null);
 
   const { movie } = useMovieDetails(showInfo?.movie_id);
+
+  // Fetch booked seats from database
+  const fetchBookedSeats = useCallback(async (info: ShowInfo, isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    
+    try {
+      const { data, error } = await supabase.rpc('get_app_booked_seat_ids', {
+        _tmdb_movie_id: info.movie_id,
+        _theater_name: info.theater_name,
+        _show_date: info.show_date,
+        _show_time: info.show_time,
+      });
+
+      if (error) {
+        console.error('Error fetching booked seats:', error);
+        return [];
+      }
+
+      return (data as string[]) || [];
+    } catch (err) {
+      console.error('Failed to fetch booked seats:', err);
+      return [];
+    } finally {
+      if (isRefresh) setRefreshing(false);
+    }
+  }, []);
+
+  // Initialize seats with booked status
+  const initializeSeats = useCallback(async (info: ShowInfo) => {
+    const bookedSeatIds = await fetchBookedSeats(info);
+    setSeats(generateSeats(bookedSeatIds));
+  }, [fetchBookedSeats]);
+
+  // Refresh seats to get latest availability
+  const refreshSeats = useCallback(async () => {
+    if (!showInfo) return;
+    
+    const bookedSeatIds = await fetchBookedSeats(showInfo, true);
+    
+    setSeats(prev => prev.map(seat => ({
+      ...seat,
+      isBooked: bookedSeatIds.includes(seat.id),
+      // Deselect if now booked by someone else
+      isSelected: bookedSeatIds.includes(seat.id) ? false : seat.isSelected,
+    })));
+
+    // Remove from selected if now booked
+    setSelectedSeats(prev => prev.filter(s => !bookedSeatIds.includes(s.id)));
+  }, [showInfo, fetchBookedSeats]);
 
   useEffect(() => {
     if (showId) {
       const info = parseShowId(showId);
       if (info) {
         setShowInfo(info);
-        setSeats(generateSeats());
+        initializeSeats(info);
       }
       setLoading(false);
     }
-  }, [showId]);
+  }, [showId, initializeSeats]);
+
+  // Auto-refresh seats every 30 seconds
+  useEffect(() => {
+    if (showInfo) {
+      refreshIntervalRef.current = window.setInterval(() => {
+        refreshSeats();
+      }, 30000);
+    }
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, [showInfo, refreshSeats]);
 
   const handleSeatClick = (seat: SeatWithStatus) => {
     if (seat.isBooked) return;
@@ -183,7 +249,6 @@ export default function Booking() {
 
     try {
       const total = calculateTotal();
-      const bookingRef = `BK${format(new Date(), 'yyyyMMdd')}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
       // Prepare seats data for JSONB storage
       const seatsData = selectedSeats.map(seat => ({
@@ -194,42 +259,56 @@ export default function Booking() {
         price: getSeatPrice(seat),
       }));
 
-      // Create booking in app_bookings table
-      const { data: bookingData, error: bookingError } = await supabase
-        .from('app_bookings')
-        .insert({
-          user_id: user.id,
-          tmdb_movie_id: showInfo.movie_id,
-          movie_title: movie?.title || 'Movie',
-          movie_poster_url: movie?.poster_url || null,
-          theater_name: showInfo.theater_name,
-          theater_location: showInfo.theater_location,
-          screen_name: showInfo.screen_name,
-          show_date: showInfo.show_date,
-          show_time: showInfo.show_time,
-          seats: seatsData,
-          total_amount: total,
-          booking_reference: bookingRef,
-          status: 'confirmed',
-        })
-        .select()
-        .single();
+      // Use atomic booking function to prevent double-booking
+      const { data: bookingResult, error: bookingError } = await supabase.rpc('complete_app_booking', {
+        _tmdb_movie_id: showInfo.movie_id,
+        _movie_title: movie?.title || 'Movie',
+        _movie_poster_url: movie?.poster_url || null,
+        _theater_name: showInfo.theater_name,
+        _theater_location: showInfo.theater_location,
+        _screen_name: showInfo.screen_name,
+        _show_date: showInfo.show_date,
+        _show_time: showInfo.show_time,
+        _seats: seatsData,
+        _total_amount: total,
+      });
 
-      if (bookingError) throw bookingError;
+      if (bookingError) {
+        // Handle specific error cases
+        if (bookingError.message.includes('seats_unavailable')) {
+          toast({
+            title: 'Seats no longer available',
+            description: 'Some seats were booked by another user. Please select different seats.',
+            variant: 'destructive',
+          });
+          // Refresh to show updated availability
+          await refreshSeats();
+          return;
+        }
+        throw bookingError;
+      }
+
+      const result = bookingResult as { booking_id: string; booking_reference: string }[];
+      
+      if (!result || result.length === 0) {
+        throw new Error('Booking failed');
+      }
+
+      const { booking_id, booking_reference } = result[0];
 
       toast({
         title: 'Booking confirmed!',
-        description: `Your booking reference is ${bookingData.booking_reference}`,
+        description: `Your booking reference is ${booking_reference}`,
       });
 
-      navigate(`/booking/confirmation/${bookingData.id}`, {
+      navigate(`/booking/confirmation/${booking_id}`, {
         state: {
           booking: {
-            id: bookingData.id,
-            booking_reference: bookingData.booking_reference,
+            id: booking_id,
+            booking_reference: booking_reference,
             total_amount: total,
             status: 'confirmed',
-            created_at: bookingData.created_at,
+            created_at: new Date().toISOString(),
             movie: movie,
             show: showInfo,
             seats: selectedSeats,
@@ -322,11 +401,23 @@ export default function Booking() {
           {/* Seat Map */}
           <div className="lg:col-span-2">
             <Card className="bg-card/80">
-              <CardHeader>
-                <CardTitle className="font-display text-xl tracking-wide">SELECT YOUR SEATS</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Select up to 10 seats. Click on available seats to select them.
-                </p>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="font-display text-xl tracking-wide">SELECT YOUR SEATS</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Select up to 10 seats. Seats update in real-time.
+                  </p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={refreshSeats}
+                  disabled={refreshing}
+                  className="shrink-0"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
               </CardHeader>
               <CardContent>
                 {/* Price Legend */}

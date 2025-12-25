@@ -512,6 +512,24 @@ export type Database = {
         }[]
       }
       cleanup_expired_reservations: { Args: never; Returns: undefined }
+      complete_app_booking: {
+        Args: {
+          _movie_poster_url: string
+          _movie_title: string
+          _screen_name: string
+          _seats: Json
+          _show_date: string
+          _show_time: string
+          _theater_location: string
+          _theater_name: string
+          _tmdb_movie_id: string
+          _total_amount: number
+        }
+        Returns: {
+          booking_id: string
+          booking_reference: string
+        }[]
+      }
       complete_booking: {
         Args: {
           _paypal_order_id?: string
@@ -526,6 +544,15 @@ export type Database = {
         }[]
       }
       generate_booking_reference: { Args: never; Returns: string }
+      get_app_booked_seat_ids: {
+        Args: {
+          _show_date: string
+          _show_time: string
+          _theater_name: string
+          _tmdb_movie_id: string
+        }
+        Returns: string[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
