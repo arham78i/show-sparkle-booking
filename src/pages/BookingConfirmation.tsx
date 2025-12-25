@@ -6,9 +6,11 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle, Calendar, Clock, MapPin, Ticket, Home, Film, Star, User } from 'lucide-react';
+import { CheckCircle, Calendar, Clock, MapPin, Ticket, Home, Film, Star, User, Download, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatPrice } from '@/lib/currency';
+import { jsPDF } from 'jspdf';
+import { useToast } from '@/hooks/use-toast';
 
 interface BookingDetails {
   id: string;
@@ -50,14 +52,158 @@ export default function BookingConfirmation() {
   const { bookingId } = useParams<{ bookingId: string }>();
   const location = useLocation();
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const [booking, setBooking] = useState<BookingDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const stateBooking = useMemo(() => {
     return (location.state as any)?.booking as BookingDetails | undefined;
   }, [location.state]);
+
+  // Generate PDF ticket
+  const generatePdfTicket = async () => {
+    if (!booking) return;
+    
+    setGeneratingPdf(true);
+    
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      // Header background
+      doc.setFillColor(220, 53, 69); // Primary red color
+      doc.rect(0, 0, pageWidth, 45, 'F');
+      
+      // Title
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(24);
+      doc.setFont('helvetica', 'bold');
+      doc.text('MOVIE TICKET', pageWidth / 2, 20, { align: 'center' });
+      
+      // Booking Reference
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Booking Ref: ${booking.booking_reference}`, pageWidth / 2, 32, { align: 'center' });
+      
+      // Status badge
+      doc.setFontSize(10);
+      doc.text(`Status: ${booking.status.toUpperCase()}`, pageWidth / 2, 40, { align: 'center' });
+      
+      // Reset text color for content
+      doc.setTextColor(0, 0, 0);
+      
+      let yPos = 60;
+      
+      // Movie Title
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text(booking.movie.title, 20, yPos);
+      yPos += 15;
+      
+      // Show Details Section
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 100, 100);
+      doc.text('SHOW DETAILS', 20, yPos);
+      yPos += 8;
+      
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(12);
+      
+      const showDate = format(parseISO(booking.show.show_date), 'EEEE, MMMM d, yyyy');
+      const showTime = format(parseISO(`2000-01-01T${booking.show.show_time}`), 'h:mm a');
+      
+      doc.text(`Date: ${showDate}`, 20, yPos);
+      yPos += 7;
+      doc.text(`Time: ${showTime}`, 20, yPos);
+      yPos += 7;
+      doc.text(`Theater: ${booking.show.theater_name}`, 20, yPos);
+      yPos += 7;
+      doc.text(`Location: ${booking.show.theater_location}`, 20, yPos);
+      yPos += 7;
+      doc.text(`Screen: ${booking.show.screen_name}`, 20, yPos);
+      yPos += 15;
+      
+      // Passengers & Seats Section
+      doc.setTextColor(100, 100, 100);
+      doc.setFontSize(11);
+      doc.text('PASSENGERS & SEATS', 20, yPos);
+      yPos += 8;
+      
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(12);
+      
+      const sortedSeats = [...booking.seats].sort((a, b) => 
+        a.row_label.localeCompare(b.row_label) || a.seat_number - b.seat_number
+      );
+      
+      sortedSeats.forEach((seat, idx) => {
+        const passengerName = seat.passenger_name || `Passenger ${idx + 1}`;
+        const seatLabel = `${seat.row_label}${seat.seat_number}`;
+        const seatPrice = seat.price ? formatPrice(seat.price) : '';
+        doc.text(`${idx + 1}. ${passengerName} - Seat ${seatLabel} (${seat.category}) ${seatPrice}`, 20, yPos);
+        yPos += 7;
+      });
+      
+      yPos += 10;
+      
+      // Total Amount
+      doc.setFillColor(245, 245, 245);
+      doc.rect(15, yPos - 5, pageWidth - 30, 15, 'F');
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Total Amount: ${formatPrice(booking.total_amount)}`, 20, yPos + 5);
+      yPos += 25;
+      
+      // Important Information
+      doc.setTextColor(100, 100, 100);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.text('IMPORTANT INFORMATION', 20, yPos);
+      yPos += 8;
+      
+      doc.setTextColor(60, 60, 60);
+      doc.setFontSize(10);
+      const instructions = [
+        '• Please arrive 15 minutes before the show starts',
+        '• Show this ticket at the entrance',
+        '• This confirmation is valid as your entry ticket',
+        '• No outside food or beverages allowed'
+      ];
+      
+      instructions.forEach(instruction => {
+        doc.text(instruction, 20, yPos);
+        yPos += 6;
+      });
+      
+      // Footer
+      yPos = doc.internal.pageSize.getHeight() - 20;
+      doc.setTextColor(150, 150, 150);
+      doc.setFontSize(8);
+      doc.text(`Generated on ${format(new Date(), 'PPpp')}`, pageWidth / 2, yPos, { align: 'center' });
+      doc.text('Thank you for booking with us!', pageWidth / 2, yPos + 5, { align: 'center' });
+      
+      // Save the PDF
+      doc.save(`ticket-${booking.booking_reference}.pdf`);
+      
+      toast({
+        title: 'Ticket Downloaded',
+        description: 'Your PDF ticket has been downloaded successfully.',
+      });
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast({
+        title: 'Download Failed',
+        description: 'Failed to generate PDF ticket. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
 
   useEffect(() => {
     if (stateBooking) setBooking(stateBooking);
@@ -392,7 +538,24 @@ export default function BookingConfirmation() {
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-4 mt-8">
-          <Button asChild className="flex-1">
+          <Button 
+            onClick={generatePdfTicket} 
+            disabled={generatingPdf}
+            className="flex-1 cinema-glow"
+          >
+            {generatingPdf ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Download className="mr-2 h-4 w-4" />
+                Download PDF Ticket
+              </>
+            )}
+          </Button>
+          <Button asChild variant="outline" className="flex-1">
             <Link to="/movies">
               <Film className="mr-2 h-4 w-4" />
               Browse More Movies
