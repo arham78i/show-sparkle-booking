@@ -18,13 +18,16 @@ const authSchema = z.object({
 export default function Auth() {
   const [searchParams] = useSearchParams();
   const isSignUp = searchParams.get('mode') === 'signup';
-  
+  const redirect = searchParams.get('redirect');
+  const redirectTo = redirect && redirect.startsWith('/') ? redirect : '/';
+  const redirectEncoded = redirect ? encodeURIComponent(redirect) : '';
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  
+
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -70,7 +73,7 @@ export default function Auth() {
           title: 'Welcome to Cinemax!',
           description: 'Your account has been created successfully.',
         });
-        navigate('/');
+        navigate(redirectTo);
       } else {
         const { error } = await signIn(email, password);
         if (error) {
@@ -85,7 +88,7 @@ export default function Auth() {
           title: 'Welcome back!',
           description: 'You have signed in successfully.',
         });
-        navigate('/');
+        navigate(redirectTo);
       }
     } finally {
       setLoading(false);
@@ -112,13 +115,13 @@ export default function Auth() {
               {isSignUp ? 'CREATE ACCOUNT' : 'WELCOME BACK'}
             </CardTitle>
             <CardDescription className="mt-2">
-              {isSignUp 
-                ? 'Sign up to start booking your favorite movies' 
+              {isSignUp
+                ? 'Sign up to start booking your favorite movies'
                 : 'Sign in to access your bookings'}
             </CardDescription>
           </div>
         </CardHeader>
-        
+
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {isSignUp && (
@@ -134,7 +137,7 @@ export default function Auth() {
                 />
               </div>
             )}
-            
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -150,7 +153,7 @@ export default function Auth() {
                 <p className="text-sm text-destructive">{errors.email}</p>
               )}
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
@@ -177,14 +180,20 @@ export default function Auth() {
             {isSignUp ? (
               <p className="text-muted-foreground">
                 Already have an account?{' '}
-                <Link to="/auth" className="text-primary hover:underline">
+                <Link
+                  to={redirectEncoded ? `/auth?redirect=${redirectEncoded}` : '/auth'}
+                  className="text-primary hover:underline"
+                >
                   Sign in
                 </Link>
               </p>
             ) : (
               <p className="text-muted-foreground">
                 Don't have an account?{' '}
-                <Link to="/auth?mode=signup" className="text-primary hover:underline">
+                <Link
+                  to={redirectEncoded ? `/auth?mode=signup&redirect=${redirectEncoded}` : '/auth?mode=signup'}
+                  className="text-primary hover:underline"
+                >
                   Sign up
                 </Link>
               </p>

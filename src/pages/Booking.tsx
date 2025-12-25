@@ -106,7 +106,7 @@ function parseShowId(showId: string): ShowInfo | null {
 export default function Booking() {
   const { showId } = useParams<{ showId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
   const [showInfo, setShowInfo] = useState<ShowInfo | null>(null);
@@ -225,12 +225,12 @@ export default function Booking() {
   };
 
   const handleBookTicket = async () => {
-    if (!user) {
+    if (authLoading || !session) {
       toast({
         title: 'Please sign in',
-        description: 'You need to be signed in to book tickets',
+        description: 'Sign in to book tickets (your session may have expired).',
       });
-      navigate('/auth');
+      navigate(`/auth?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
       return;
     }
 
@@ -528,7 +528,7 @@ export default function Booking() {
                 <Button
                   className="w-full cinema-glow"
                   size="lg"
-                  disabled={selectedSeats.length === 0 || booking}
+                  disabled={selectedSeats.length === 0 || booking || authLoading}
                   onClick={handleBookTicket}
                 >
                   {booking ? (
@@ -541,7 +541,7 @@ export default function Booking() {
                   )}
                 </Button>
 
-                {!user && (
+                {!session && (
                   <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
                     <AlertCircle className="h-3 w-3" />
                     You'll need to sign in to complete your booking
