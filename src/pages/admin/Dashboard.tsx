@@ -254,6 +254,16 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* Quick Actions */}
+        <div className="mb-6">
+          <Button asChild>
+            <Link to="/admin/history" className="gap-2">
+              <Ticket className="h-4 w-4" />
+              View Booking History
+            </Link>
+          </Button>
+        </div>
+
         {/* Tabs */}
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList className="grid w-full md:w-auto grid-cols-4 md:inline-flex">
