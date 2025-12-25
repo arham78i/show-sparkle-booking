@@ -225,7 +225,18 @@ export default function Booking() {
   };
 
   const handleBookTicket = async () => {
-    if (authLoading || !session) {
+    if (authLoading) {
+      toast({
+        title: 'Please wait',
+        description: 'Checking your sign-in status…',
+      });
+      return;
+    }
+
+    // Always validate against the client session (prevents calls with anon token)
+    const { data: { session: latestSession } } = await supabase.auth.getSession();
+
+    if (!latestSession) {
       toast({
         title: 'Please sign in',
         description: 'Sign in to book tickets (your session may have expired).',
@@ -285,6 +296,17 @@ export default function Booking() {
           await refreshSeats();
           return;
         }
+
+        if (bookingError.message.includes('not_authenticated')) {
+          toast({
+            title: 'Please sign in',
+            description: 'Your login session expired. Please sign in again to book.',
+            variant: 'destructive',
+          });
+          navigate(`/auth?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+          return;
+        }
+
         throw bookingError;
       }
 
