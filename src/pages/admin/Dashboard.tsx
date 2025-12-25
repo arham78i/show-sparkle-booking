@@ -178,7 +178,7 @@ export default function AdminDashboard() {
             You don't have permission to access the admin dashboard.
           </p>
           <Button asChild>
-            <Link to="/">Go Home</Link>
+            <Link to="/home">Go Home</Link>
           </Button>
         </div>
       </Layout>

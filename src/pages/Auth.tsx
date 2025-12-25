@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,7 @@ export default function Auth() {
   const [searchParams] = useSearchParams();
   const isSignUp = searchParams.get('mode') === 'signup';
   const redirect = searchParams.get('redirect');
-  const redirectTo = redirect && redirect.startsWith('/') ? redirect : '/';
+  const redirectTo = redirect && redirect.startsWith('/') ? redirect : '/home';
   const redirectEncoded = redirect ? encodeURIComponent(redirect) : '';
 
   const [email, setEmail] = useState('');
@@ -28,9 +28,16 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
-  const { signIn, signUp } = useAuth();
+  const { user, loading: authLoading, signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate(redirectTo, { replace: true });
+    }
+  }, [user, authLoading, navigate, redirectTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,7 +111,7 @@ export default function Auth() {
 
       <Card className="w-full max-w-md relative z-10 bg-card/95 backdrop-blur-xl border-border">
         <CardHeader className="text-center space-y-4">
-          <Link to="/" className="flex items-center justify-center gap-2">
+          <Link to="/home" className="flex items-center justify-center gap-2">
             <div className="p-2 rounded-lg bg-primary/10">
               <Film className="h-6 w-6 text-primary" />
             </div>
