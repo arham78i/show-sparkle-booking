@@ -18,6 +18,8 @@ interface BookingDetails {
   created_at: string;
   cancelled_at?: string | null;
   refund_amount?: number | null;
+  guest_name?: string;
+  is_guest_booking?: boolean;
   movie: {
     title: string;
     poster_url: string | null;
@@ -66,7 +68,12 @@ export default function BookingConfirmation() {
 
     const fetchBooking = async () => {
       if (!bookingId) return;
-      if (!user && !stateBooking) return; // can't read protected booking without auth
+      
+      // For guest bookings from state, we already have the data
+      if (stateBooking) return;
+      
+      // Try to fetch - guest bookings are public, user bookings need auth
+      if (!user) return;
 
       setLoading(true);
       setLoadError(null);
@@ -100,6 +107,8 @@ export default function BookingConfirmation() {
         created_at: (data as any).created_at,
         cancelled_at: (data as any).cancelled_at,
         refund_amount: Number((data as any).refund_amount ?? 0),
+        guest_name: (data as any).guest_name,
+        is_guest_booking: (data as any).is_guest_booking,
         movie: {
           title: (data as any).movie_title,
           poster_url: (data as any).movie_poster_url,

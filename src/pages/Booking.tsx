@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useMovieDetails } from '@/hooks/useTMDBMovies';
 import { supabase } from '@/integrations/supabase/client';
 import { SeatWithStatus, SeatCategory } from '@/types/database';
-import { ArrowLeft, Clock, Calendar, MapPin, Ticket, Star, AlertCircle, Loader2, RefreshCw, User } from 'lucide-react';
+import { ArrowLeft, Clock, Calendar, MapPin, Ticket, Star, AlertCircle, Loader2, RefreshCw, User, Mail, Phone, LogIn, UserPlus } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { formatPrice } from '@/lib/currency';
 
@@ -119,6 +119,10 @@ export default function Booking() {
   const [booking, setBooking] = useState(false);
   const [passengerNames, setPassengerNames] = useState<Record<string, string>>({});
   const refreshIntervalRef = useRef<number | null>(null);
+  
+  // Guest checkout state
+  const [bookingMode, setBookingMode] = useState<'login' | 'guest'>('login');
+  const [guestInfo, setGuestInfo] = useState({ name: '', email: '', phone: '' });
 
   const { movie } = useMovieDetails(showInfo?.movie_id);
 
@@ -232,6 +236,11 @@ export default function Booking() {
     seat => passengerNames[seat.id]?.trim()
   );
 
+  // Validate guest info
+  const isGuestInfoValid = bookingMode === 'guest' 
+    ? guestInfo.name.trim() && guestInfo.email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestInfo.email.trim())
+    : true;
+
   const calculateTotal = useCallback(() => {
     if (!showInfo) return 0;
     return selectedSeats.reduce((total, seat) => {
@@ -245,26 +254,6 @@ export default function Booking() {
   };
 
   const handleBookTicket = async () => {
-    if (authLoading) {
-      toast({
-        title: 'Please wait',
-        description: 'Checking your sign-in status…',
-      });
-      return;
-    }
-
-    // Always validate against the client session (prevents calls with anon token)
-    const { data: { session: latestSession } } = await supabase.auth.getSession();
-
-    if (!latestSession) {
-      toast({
-        title: 'Please sign in',
-        description: 'Sign in to book tickets (your session may have expired).',
-      });
-      navigate(`/auth?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
-      return;
-    }
-
     if (selectedSeats.length === 0) {
       toast({
         title: 'No seats selected',
@@ -287,6 +276,48 @@ export default function Booking() {
 
     if (!showInfo) return;
 
+    // Handle login mode
+    if (bookingMode === 'login') {
+      if (authLoading) {
+        toast({
+          title: 'Please wait',
+          description: 'Checking your sign-in status…',
+        });
+        return;
+      }
+
+      const { data: { session: latestSession } } = await supabase.auth.getSession();
+
+      if (!latestSession) {
+        toast({
+          title: 'Please sign in',
+          description: 'Sign in to book tickets (your session may have expired).',
+        });
+        navigate(`/auth?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+        return;
+      }
+    }
+
+    // Validate guest info
+    if (bookingMode === 'guest') {
+      if (!guestInfo.name.trim()) {
+        toast({
+          title: 'Name required',
+          description: 'Please enter your name',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (!guestInfo.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestInfo.email.trim())) {
+        toast({
+          title: 'Valid email required',
+          description: 'Please enter a valid email address',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     setBooking(true);
 
     try {
@@ -302,19 +333,45 @@ export default function Booking() {
         passenger_name: passengerNames[seat.id]?.trim() || '',
       }));
 
-      // Use atomic booking function to prevent double-booking
-      const { data: bookingResult, error: bookingError } = await supabase.rpc('complete_app_booking', {
-        _tmdb_movie_id: showInfo.movie_id,
-        _movie_title: movie?.title || 'Movie',
-        _movie_poster_url: movie?.poster_url || null,
-        _theater_name: showInfo.theater_name,
-        _theater_location: showInfo.theater_location,
-        _screen_name: showInfo.screen_name,
-        _show_date: showInfo.show_date,
-        _show_time: showInfo.show_time,
-        _seats: seatsData,
-        _total_amount: total,
-      });
+      let bookingResult;
+      let bookingError;
+
+      if (bookingMode === 'guest') {
+        // Guest checkout
+        const result = await supabase.rpc('complete_guest_booking', {
+          _tmdb_movie_id: showInfo.movie_id,
+          _movie_title: movie?.title || 'Movie',
+          _movie_poster_url: movie?.poster_url || null,
+          _theater_name: showInfo.theater_name,
+          _theater_location: showInfo.theater_location,
+          _screen_name: showInfo.screen_name,
+          _show_date: showInfo.show_date,
+          _show_time: showInfo.show_time,
+          _seats: seatsData,
+          _total_amount: total,
+          _guest_name: guestInfo.name.trim(),
+          _guest_email: guestInfo.email.trim(),
+          _guest_phone: guestInfo.phone.trim() || null,
+        });
+        bookingResult = result.data;
+        bookingError = result.error;
+      } else {
+        // Logged in user booking
+        const result = await supabase.rpc('complete_app_booking', {
+          _tmdb_movie_id: showInfo.movie_id,
+          _movie_title: movie?.title || 'Movie',
+          _movie_poster_url: movie?.poster_url || null,
+          _theater_name: showInfo.theater_name,
+          _theater_location: showInfo.theater_location,
+          _screen_name: showInfo.screen_name,
+          _show_date: showInfo.show_date,
+          _show_time: showInfo.show_time,
+          _seats: seatsData,
+          _total_amount: total,
+        });
+        bookingResult = result.data;
+        bookingError = result.error;
+      }
 
       if (bookingError) {
         // Handle specific error cases
@@ -324,7 +381,6 @@ export default function Booking() {
             description: 'Some seats were booked by another user. Please select different seats.',
             variant: 'destructive',
           });
-          // Refresh to show updated availability
           await refreshSeats();
           return;
         }
@@ -365,7 +421,8 @@ export default function Booking() {
             created_at: new Date().toISOString(),
             movie: movie,
             show: showInfo,
-            seats: seatsData, // Pass seatsData which includes passenger_name
+            seats: seatsData,
+            guest_name: bookingMode === 'guest' ? guestInfo.name.trim() : undefined,
           }
         }
       });
@@ -587,6 +644,111 @@ export default function Booking() {
                   )}
                 </div>
 
+                {/* Booking Mode Selector */}
+                <div className="border-t border-border pt-4">
+                  <p className="text-sm text-muted-foreground mb-3">Checkout Option</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBookingMode('login')}
+                      className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
+                        bookingMode === 'login'
+                          ? 'border-accent bg-accent/10 text-accent'
+                          : 'border-border bg-secondary/30 text-muted-foreground hover:border-accent/50'
+                      }`}
+                    >
+                      <LogIn className="h-4 w-4" />
+                      Sign In
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBookingMode('guest')}
+                      className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
+                        bookingMode === 'guest'
+                          ? 'border-accent bg-accent/10 text-accent'
+                          : 'border-border bg-secondary/30 text-muted-foreground hover:border-accent/50'
+                      }`}
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      Guest
+                    </button>
+                  </div>
+
+                  {/* Guest Info Form */}
+                  {bookingMode === 'guest' && (
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <Label htmlFor="guest-name" className="text-xs text-muted-foreground">
+                          Your Name *
+                        </Label>
+                        <div className="relative mt-1">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="guest-name"
+                            placeholder="Enter your name"
+                            value={guestInfo.name}
+                            onChange={(e) => setGuestInfo(prev => ({ ...prev, name: e.target.value }))}
+                            className="h-9 pl-9 text-sm bg-background/50"
+                            maxLength={100}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="guest-email" className="text-xs text-muted-foreground">
+                          Email Address *
+                        </Label>
+                        <div className="relative mt-1">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="guest-email"
+                            type="email"
+                            placeholder="Enter your email"
+                            value={guestInfo.email}
+                            onChange={(e) => setGuestInfo(prev => ({ ...prev, email: e.target.value }))}
+                            className="h-9 pl-9 text-sm bg-background/50"
+                            maxLength={255}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="guest-phone" className="text-xs text-muted-foreground">
+                          Phone (Optional)
+                        </Label>
+                        <div className="relative mt-1">
+                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="guest-phone"
+                            type="tel"
+                            placeholder="Enter phone number"
+                            value={guestInfo.phone}
+                            onChange={(e) => setGuestInfo(prev => ({ ...prev, phone: e.target.value }))}
+                            className="h-9 pl-9 text-sm bg-background/50"
+                            maxLength={20}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Login prompt for login mode */}
+                  {bookingMode === 'login' && !session && (
+                    <div className="mt-3 p-3 bg-secondary/30 rounded-lg">
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Sign in to track your bookings and get faster checkout
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => navigate(`/auth?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`)}
+                      >
+                        <LogIn className="mr-2 h-4 w-4" />
+                        Sign In / Sign Up
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
                 <div className="border-t border-border pt-4">
                   <div className="flex justify-between text-lg font-semibold">
                     <span>Total</span>
@@ -599,7 +761,14 @@ export default function Booking() {
                 <Button
                   className="w-full cinema-glow"
                   size="lg"
-                  disabled={selectedSeats.length === 0 || !allPassengerNamesEntered || booking || authLoading}
+                  disabled={
+                    selectedSeats.length === 0 || 
+                    !allPassengerNamesEntered || 
+                    booking || 
+                    (bookingMode === 'login' && authLoading) ||
+                    (bookingMode === 'login' && !session) ||
+                    (bookingMode === 'guest' && !isGuestInfoValid)
+                  }
                   onClick={handleBookTicket}
                 >
                   {booking ? (
@@ -619,10 +788,10 @@ export default function Booking() {
                   </p>
                 )}
 
-                {!session && (
-                  <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
+                {bookingMode === 'guest' && !isGuestInfoValid && selectedSeats.length > 0 && allPassengerNamesEntered && (
+                  <p className="text-xs text-amber-500 text-center flex items-center justify-center gap-1">
                     <AlertCircle className="h-3 w-3" />
-                    You'll need to sign in to complete your booking
+                    Enter your name and valid email to continue
                   </p>
                 )}
               </CardContent>
