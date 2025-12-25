@@ -267,8 +267,8 @@ export default function Booking() {
     const missingNames = selectedSeats.filter(seat => !passengerNames[seat.id]?.trim());
     if (missingNames.length > 0) {
       toast({
-        title: 'Passenger names required',
-        description: `Please enter names for all ${selectedSeats.length} passenger(s)`,
+        title: 'Person names required',
+        description: `Please enter names for all ${selectedSeats.length} person(s)`,
         variant: 'destructive',
       });
       return;
@@ -606,7 +606,7 @@ export default function Booking() {
                   <div className="flex justify-between text-sm mb-3">
                     <span className="text-muted-foreground flex items-center gap-1">
                       <User className="h-4 w-4" />
-                      Passengers ({selectedSeats.length})
+                      Persons ({selectedSeats.length})
                     </span>
                   </div>
                   {selectedSeats.length > 0 && (
@@ -627,11 +627,11 @@ export default function Booking() {
                             </div>
                             <div>
                               <Label htmlFor={`passenger-${seat.id}`} className="text-xs text-muted-foreground">
-                                Passenger {idx + 1} Name
+                                Person {idx + 1} Name
                               </Label>
                               <Input
                                 id={`passenger-${seat.id}`}
-                                placeholder="Enter passenger name"
+                                placeholder="Enter person name"
                                 value={passengerNames[seat.id] || ''}
                                 onChange={(e) => handlePassengerNameChange(seat.id, e.target.value)}
                                 className="mt-1 h-8 text-sm bg-background/50"
@@ -784,7 +784,7 @@ export default function Booking() {
                 {selectedSeats.length > 0 && !allPassengerNamesEntered && (
                   <p className="text-xs text-amber-500 text-center flex items-center justify-center gap-1">
                     <AlertCircle className="h-3 w-3" />
-                    Enter names for all passengers to continue
+                    Enter names for all persons to continue
                   </p>
                 )}
 
