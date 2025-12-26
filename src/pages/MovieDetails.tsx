@@ -6,63 +6,31 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMovieDetails, useSimilarMovies } from '@/hooks/useSupabaseMovies';
-import { Show, Screen, Theater } from '@/types/database';
+import { supabase } from '@/integrations/supabase/client';
 import { Clock, Star, Calendar, Play, MapPin, ChevronRight } from 'lucide-react';
 import { format, parseISO, addDays, isToday, isTomorrow } from 'date-fns';
 import { formatPrice } from '@/lib/currency';
 import { MovieCard } from '@/components/movies/MovieCard';
 
-interface ShowWithDetails extends Show {
-  screen: Screen & { theater: Theater };
-}
-
-// Sample shows generator for movies
-function generateSampleShows(movieId: string, selectedDate: string): ShowWithDetails[] {
-  const theaters = [
-    { id: '1', name: 'Nueplex Cinemas', location: 'Clifton', city: 'Karachi' },
-    { id: '2', name: 'Cinepax', location: 'Dolmen Mall', city: 'Karachi' },
-    { id: '3', name: 'Cue Cinema', location: 'Gulshan', city: 'Karachi' },
-  ];
-
-  const times = ['10:00', '13:30', '16:00', '19:00', '21:30'];
-  const prices = [500, 650, 800]; // PKR prices: morning, afternoon, evening
-
-  const shows: ShowWithDetails[] = [];
-
-  theaters.forEach((theater, tIdx) => {
-    const selectedTimes = times.slice(tIdx, tIdx + 3);
-    selectedTimes.forEach((time, idx) => {
-      shows.push({
-        id: `${movieId}-${theater.id}-${time.replace(':', '')}`,
-        movie_id: movieId,
-        screen_id: `screen-${theater.id}-${idx + 1}`,
-        show_date: selectedDate,
-        show_time: time + ':00',
-        base_price: prices[idx % prices.length],
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        screen: {
-          id: `screen-${theater.id}-${idx + 1}`,
-          theater_id: theater.id,
-          name: `Screen ${idx + 1}`,
-          total_seats: 100,
-          rows: 10,
-          columns: 10,
-          created_at: new Date().toISOString(),
-          theater: {
-            ...theater,
-            address: `123 ${theater.location}`,
-            phone: '555-0100',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-        },
-      });
-    });
-  });
-
-  return shows;
+interface ShowWithDetails {
+  id: string;
+  movie_id: string;
+  screen_id: string;
+  show_date: string;
+  show_time: string;
+  base_price: number;
+  is_active: boolean;
+  screen: {
+    id: string;
+    name: string;
+    theater_id: string;
+    theater: {
+      id: string;
+      name: string;
+      location: string;
+      city: string;
+    };
+  };
 }
 
 export default function MovieDetails() {
@@ -70,6 +38,7 @@ export default function MovieDetails() {
   const { movie, loading } = useMovieDetails(id);
   const { movies: similarMovies, loading: similarLoading } = useSimilarMovies(id);
   const [shows, setShows] = useState<ShowWithDetails[]>([]);
+  const [showsLoading, setShowsLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
   const dates = Array.from({ length: 7 }, (_, i) => {
@@ -82,26 +51,77 @@ export default function MovieDetails() {
     };
   });
 
+  // Fetch shows from database
   useEffect(() => {
-    if (id && selectedDate && movie) {
-      // Generate sample shows for this movie
-      const sampleShows = generateSampleShows(id, selectedDate);
-      setShows(sampleShows);
+    async function fetchShows() {
+      if (!movie?.id) return;
+      
+      setShowsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('shows')
+          .select(`
+            id,
+            movie_id,
+            screen_id,
+            show_date,
+            show_time,
+            base_price,
+            is_active,
+            screen:screens (
+              id,
+              name,
+              theater_id,
+              theater:theaters (
+                id,
+                name,
+                location,
+                city
+              )
+            )
+          `)
+          .eq('movie_id', movie.id)
+          .eq('show_date', selectedDate)
+          .eq('is_active', true)
+          .order('show_time');
+
+        if (error) {
+          console.error('Error fetching shows:', error);
+          return;
+        }
+
+        // Transform the data to match our interface
+        const transformedShows = (data || []).map((show: any) => ({
+          ...show,
+          screen: {
+            ...show.screen,
+            theater: show.screen?.theater || { id: '', name: 'Unknown', location: '', city: '' }
+          }
+        })) as ShowWithDetails[];
+
+        setShows(transformedShows);
+      } catch (err) {
+        console.error('Failed to fetch shows:', err);
+      } finally {
+        setShowsLoading(false);
+      }
     }
-  }, [id, selectedDate, movie]);
+
+    fetchShows();
+  }, [movie?.id, selectedDate]);
 
   // Group shows by theater
   const showsByTheater = shows.reduce((acc, show) => {
-    const theaterId = show.screen.theater.id;
+    const theaterId = show.screen?.theater?.id || 'unknown';
     if (!acc[theaterId]) {
       acc[theaterId] = {
-        theater: show.screen.theater,
+        theater: show.screen?.theater || { id: 'unknown', name: 'Unknown Theater', location: '', city: '' },
         shows: [],
       };
     }
     acc[theaterId].shows.push(show);
     return acc;
-  }, {} as Record<string, { theater: Theater; shows: ShowWithDetails[] }>);
+  }, {} as Record<string, { theater: { id: string; name: string; location: string; city: string }; shows: ShowWithDetails[] }>);
 
   if (loading) {
     return (
@@ -241,7 +261,13 @@ export default function MovieDetails() {
             </div>
 
             {/* Shows by Theater */}
-            {Object.keys(showsByTheater).length > 0 ? (
+            {showsLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map(i => (
+                  <Skeleton key={i} className="h-32 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : Object.keys(showsByTheater).length > 0 ? (
               <div className="space-y-6">
                 {Object.values(showsByTheater).map(({ theater, shows }) => (
                   <Card key={theater.id} className="bg-card/80">
