@@ -31,6 +31,14 @@ export function MovieCard({ movie }: MovieCardProps) {
             src={movie.poster_url}
             alt={movie.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.style.display = 'none';
+              target.parentElement?.classList.add('bg-secondary', 'flex', 'items-center', 'justify-center');
+              const placeholder = document.createElement('div');
+              placeholder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>`;
+              target.parentElement?.appendChild(placeholder.firstChild!);
+            }}
           />
         ) : (
           <div className="w-full h-full bg-secondary flex items-center justify-center">
