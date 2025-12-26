@@ -103,17 +103,13 @@ export function useMovieDetails(movieId: string | undefined) {
       try {
         setLoading(true);
         
-        // Try to find by tmdb_id first (for backward compatibility)
-        let { data, error } = await supabase
-          .from('movies')
-          .select('*')
-          .eq('tmdb_id', parseInt(movieId))
-          .maybeSingle();
-
-        if (error) throw error;
-
-        // If not found by tmdb_id, try by id
-        if (!data) {
+        let data = null;
+        
+        // Check if movieId is a valid UUID or a numeric tmdb_id
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(movieId);
+        
+        if (isUUID) {
+          // Search by UUID id first
           const result = await supabase
             .from('movies')
             .select('*')
@@ -122,6 +118,19 @@ export function useMovieDetails(movieId: string | undefined) {
           
           if (result.error) throw result.error;
           data = result.data;
+        } else {
+          // Try to find by tmdb_id (numeric)
+          const tmdbId = parseInt(movieId);
+          if (!isNaN(tmdbId)) {
+            const result = await supabase
+              .from('movies')
+              .select('*')
+              .eq('tmdb_id', tmdbId)
+              .maybeSingle();
+
+            if (result.error) throw result.error;
+            data = result.data;
+          }
         }
 
         if (data) {
