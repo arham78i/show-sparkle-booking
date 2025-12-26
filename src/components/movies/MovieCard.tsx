@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SupabaseMovie } from '@/hooks/useSupabaseMovies';
-import { Play, Star, Clock, Calendar } from 'lucide-react';
+import { Play, Star, Clock, Calendar, Film } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 const statusLabels = {
@@ -22,27 +23,22 @@ interface MovieCardProps {
 }
 
 export function MovieCard({ movie }: MovieCardProps) {
+  const [imageError, setImageError] = useState(false);
+
   return (
     <div className="group relative rounded-xl overflow-hidden bg-card border border-border hover:border-primary/50 transition-all duration-300">
       {/* Poster */}
       <div className="relative aspect-[2/3] overflow-hidden">
-        {movie.poster_url ? (
+        {movie.poster_url && !imageError ? (
           <img
             src={movie.poster_url}
             alt={movie.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              target.parentElement?.classList.add('bg-secondary', 'flex', 'items-center', 'justify-center');
-              const placeholder = document.createElement('div');
-              placeholder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>`;
-              target.parentElement?.appendChild(placeholder.firstChild!);
-            }}
+            onError={() => setImageError(true)}
           />
         ) : (
           <div className="w-full h-full bg-secondary flex items-center justify-center">
-            <Play className="h-12 w-12 text-muted-foreground" />
+            <Film className="h-12 w-12 text-muted-foreground" />
           </div>
         )}
         
