@@ -5,8 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useMovieDetails, useSimilarMovies } from '@/hooks/useTMDBMovies';
-import { supabase } from '@/integrations/supabase/client';
+import { useMovieDetails, useSimilarMovies } from '@/hooks/useSupabaseMovies';
 import { Show, Screen, Theater } from '@/types/database';
 import { Clock, Star, Calendar, Play, MapPin, ChevronRight } from 'lucide-react';
 import { format, parseISO, addDays, isToday, isTomorrow } from 'date-fns';
@@ -17,7 +16,7 @@ interface ShowWithDetails extends Show {
   screen: Screen & { theater: Theater };
 }
 
-// Sample shows generator for TMDB movies
+// Sample shows generator for movies
 function generateSampleShows(movieId: string, selectedDate: string): ShowWithDetails[] {
   const theaters = [
     { id: '1', name: 'Nueplex Cinemas', location: 'Clifton', city: 'Karachi' },

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { AppMovie } from '@/hooks/useTMDBMovies';
+import { SupabaseMovie } from '@/hooks/useSupabaseMovies';
 import { Play, Star, Clock, Calendar } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
@@ -18,7 +18,7 @@ const statusColors = {
 };
 
 interface MovieCardProps {
-  movie: AppMovie;
+  movie: SupabaseMovie;
 }
 
 export function MovieCard({ movie }: MovieCardProps) {
@@ -44,7 +44,7 @@ export function MovieCard({ movie }: MovieCardProps) {
         {/* Quick Book Button */}
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
           <Button asChild className="cinema-glow">
-            <Link to={`/movies/${movie.tmdb_id}`}>Book Now</Link>
+            <Link to={`/movies/${movie.tmdb_id || movie.id}`}>Book Now</Link>
           </Button>
         </div>
 
