@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { useMovieDetails } from '@/hooks/useTMDBMovies';
 import { supabase } from '@/integrations/supabase/client';
 import { SeatWithStatus, SeatCategory } from '@/types/database';
 import { ArrowLeft, Clock, Calendar, MapPin, Ticket, Star, AlertCircle, Loader2, RefreshCw, User, Mail, Phone, LogIn, UserPlus } from 'lucide-react';
@@ -25,84 +24,15 @@ interface ShowInfo {
   theater_name: string;
   theater_location: string;
   screen_name: string;
+  screen_id: string;
 }
 
-// Generate sample seats for a screen
-function generateSeats(bookedSeatIds: string[] = []): SeatWithStatus[] {
-  const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-  const seatsPerRow = 12;
-  const seats: SeatWithStatus[] = [];
-
-  rows.forEach((row, rowIdx) => {
-    for (let seatNum = 1; seatNum <= seatsPerRow; seatNum++) {
-      let category: SeatCategory = 'regular';
-      let priceMultiplier = 1.0;
-
-      // VIP rows (I, J - back rows)
-      if (rowIdx >= 8) {
-        category = 'vip';
-        priceMultiplier = 1.5;
-      }
-      // Premium rows (F, G, H - middle rows)
-      else if (rowIdx >= 5) {
-        category = 'premium';
-        priceMultiplier = 1.25;
-      }
-
-      const seatId = `${row}${seatNum}`;
-      const isBooked = bookedSeatIds.includes(seatId);
-
-      seats.push({
-        id: seatId,
-        screen_id: 'sample-screen',
-        row_label: row,
-        seat_number: seatNum,
-        category,
-        price_multiplier: priceMultiplier,
-        created_at: new Date().toISOString(),
-        isBooked,
-        isSelected: false,
-      });
-    }
-  });
-
-  return seats;
-}
-
-// Parse show ID to get show info
-function parseShowId(showId: string): ShowInfo | null {
-  const parts = showId.split('-');
-  if (parts.length < 3) return null;
-
-  const movieId = parts[0];
-  const theaterId = parts[1];
-  const time = parts[2];
-
-  const theaters: Record<string, { name: string; location: string }> = {
-    '1': { name: 'Nueplex Cinemas', location: 'Clifton, Karachi' },
-    '2': { name: 'Cinepax', location: 'Dolmen Mall, Karachi' },
-    '3': { name: 'Cue Cinema', location: 'Gulshan, Karachi' },
-  };
-
-  const theater = theaters[theaterId] || theaters['1'];
-  const formattedTime = time.slice(0, 2) + ':' + time.slice(2) + ':00';
-
-  // Price based on time in PKR
-  const hour = parseInt(time.slice(0, 2));
-  let basePrice = 500; // Rs. 500 for morning shows
-  if (hour >= 18) basePrice = 800; // Rs. 800 for evening shows
-  else if (hour >= 14) basePrice = 650; // Rs. 650 for afternoon shows
-
-  return {
-    id: showId,
-    movie_id: movieId,
-    show_date: format(new Date(), 'yyyy-MM-dd'),
-    show_time: formattedTime,
-    base_price: basePrice,
-    theater_name: theater.name,
-    theater_location: theater.location,
-    screen_name: 'Screen 1',
-  };
+interface MovieInfo {
+  id: string;
+  title: string;
+  poster_url: string | null;
+  rating: number | null;
+  tmdb_id: number | null;
 }
 
 export default function Booking() {
@@ -112,6 +42,7 @@ export default function Booking() {
   const { toast } = useToast();
 
   const [showInfo, setShowInfo] = useState<ShowInfo | null>(null);
+  const [movie, setMovie] = useState<MovieInfo | null>(null);
   const [seats, setSeats] = useState<SeatWithStatus[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<SeatWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,15 +55,107 @@ export default function Booking() {
   const [bookingMode, setBookingMode] = useState<'login' | 'guest'>('login');
   const [guestInfo, setGuestInfo] = useState({ name: '', email: '', phone: '' });
 
-  const { movie } = useMovieDetails(showInfo?.movie_id);
+  // Fetch show info from database
+  const fetchShowInfo = useCallback(async () => {
+    if (!showId) return null;
+    
+    try {
+      const { data, error } = await supabase
+        .from('shows')
+        .select(`
+          id,
+          movie_id,
+          show_date,
+          show_time,
+          base_price,
+          screen_id,
+          screen:screens (
+            id,
+            name,
+            theater:theaters (
+              id,
+              name,
+              location,
+              city
+            )
+          ),
+          movie:movies (
+            id,
+            title,
+            poster_url,
+            rating,
+            tmdb_id
+          )
+        `)
+        .eq('id', showId)
+        .maybeSingle();
 
-  // Fetch booked seats from database
+      if (error) {
+        console.error('Error fetching show:', error);
+        return null;
+      }
+
+      if (!data) return null;
+
+      const showData: ShowInfo = {
+        id: data.id,
+        movie_id: data.movie_id,
+        show_date: data.show_date,
+        show_time: data.show_time,
+        base_price: data.base_price,
+        screen_id: data.screen_id,
+        theater_name: (data.screen as any)?.theater?.name || 'Unknown Theater',
+        theater_location: `${(data.screen as any)?.theater?.location || ''}, ${(data.screen as any)?.theater?.city || ''}`,
+        screen_name: (data.screen as any)?.name || 'Screen 1',
+      };
+
+      const movieData: MovieInfo = {
+        id: (data.movie as any)?.id || '',
+        title: (data.movie as any)?.title || 'Movie',
+        poster_url: (data.movie as any)?.poster_url || null,
+        rating: (data.movie as any)?.rating || null,
+        tmdb_id: (data.movie as any)?.tmdb_id || null,
+      };
+
+      return { show: showData, movie: movieData };
+    } catch (err) {
+      console.error('Failed to fetch show:', err);
+      return null;
+    }
+  }, [showId]);
+
+  // Fetch seats from database
+  const fetchSeats = useCallback(async (screenId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('seats')
+        .select('*')
+        .eq('screen_id', screenId)
+        .order('row_label')
+        .order('seat_number');
+
+      if (error) {
+        console.error('Error fetching seats:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (err) {
+      console.error('Failed to fetch seats:', err);
+      return [];
+    }
+  }, []);
+
+  // Fetch booked seats using the app_bookings table
   const fetchBookedSeats = useCallback(async (info: ShowInfo, isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     
     try {
+      // First, try using the movie's tmdb_id if available
+      const tmdbId = movie?.tmdb_id?.toString() || info.movie_id;
+      
       const { data, error } = await supabase.rpc('get_app_booked_seat_ids', {
-        _tmdb_movie_id: info.movie_id,
+        _tmdb_movie_id: tmdbId,
         _theater_name: info.theater_name,
         _show_date: info.show_date,
         _show_time: info.show_time,
@@ -150,41 +173,44 @@ export default function Booking() {
     } finally {
       if (isRefresh) setRefreshing(false);
     }
-  }, []);
+  }, [movie?.tmdb_id]);
 
-  // Initialize seats with booked status
-  const initializeSeats = useCallback(async (info: ShowInfo) => {
-    const bookedSeatIds = await fetchBookedSeats(info);
-    setSeats(generateSeats(bookedSeatIds));
-  }, [fetchBookedSeats]);
-
-  // Refresh seats to get latest availability
-  const refreshSeats = useCallback(async () => {
-    if (!showInfo) return;
-    
-    const bookedSeatIds = await fetchBookedSeats(showInfo, true);
-    
-    setSeats(prev => prev.map(seat => ({
-      ...seat,
-      isBooked: bookedSeatIds.includes(seat.id),
-      // Deselect if now booked by someone else
-      isSelected: bookedSeatIds.includes(seat.id) ? false : seat.isSelected,
-    })));
-
-    // Remove from selected if now booked
-    setSelectedSeats(prev => prev.filter(s => !bookedSeatIds.includes(s.id)));
-  }, [showInfo, fetchBookedSeats]);
-
+  // Initialize everything
   useEffect(() => {
-    if (showId) {
-      const info = parseShowId(showId);
-      if (info) {
-        setShowInfo(info);
-        initializeSeats(info);
+    async function initialize() {
+      if (!showId) {
+        setLoading(false);
+        return;
       }
+
+      const result = await fetchShowInfo();
+      if (!result) {
+        setLoading(false);
+        return;
+      }
+
+      setShowInfo(result.show);
+      setMovie(result.movie);
+
+      // Fetch seats for this screen
+      const dbSeats = await fetchSeats(result.show.screen_id);
+      
+      // Fetch booked seats
+      const bookedSeatIds = await fetchBookedSeats(result.show, false);
+
+      // Map database seats to SeatWithStatus
+      const seatsWithStatus: SeatWithStatus[] = dbSeats.map(seat => ({
+        ...seat,
+        isBooked: bookedSeatIds.includes(seat.id) || bookedSeatIds.includes(`${seat.row_label}${seat.seat_number}`),
+        isSelected: false,
+      }));
+
+      setSeats(seatsWithStatus);
       setLoading(false);
     }
-  }, [showId, initializeSeats]);
+
+    initialize();
+  }, [showId, fetchShowInfo, fetchSeats, fetchBookedSeats]);
 
   // Auto-refresh seats every 30 seconds
   useEffect(() => {
@@ -199,7 +225,26 @@ export default function Booking() {
         clearInterval(refreshIntervalRef.current);
       }
     };
-  }, [showInfo, refreshSeats]);
+  }, [showInfo]);
+
+  // Refresh seats to get latest availability
+  const refreshSeats = useCallback(async () => {
+    if (!showInfo) return;
+    
+    const bookedSeatIds = await fetchBookedSeats(showInfo, true);
+    
+    setSeats(prev => prev.map(seat => ({
+      ...seat,
+      isBooked: bookedSeatIds.includes(seat.id) || bookedSeatIds.includes(`${seat.row_label}${seat.seat_number}`),
+      // Deselect if now booked by someone else
+      isSelected: (bookedSeatIds.includes(seat.id) || bookedSeatIds.includes(`${seat.row_label}${seat.seat_number}`)) ? false : seat.isSelected,
+    })));
+
+    // Remove from selected if now booked
+    setSelectedSeats(prev => prev.filter(s => 
+      !bookedSeatIds.includes(s.id) && !bookedSeatIds.includes(`${s.row_label}${s.seat_number}`)
+    ));
+  }, [showInfo, fetchBookedSeats]);
 
   const handleSeatClick = (seat: SeatWithStatus) => {
     if (seat.isBooked) return;
@@ -322,10 +367,11 @@ export default function Booking() {
 
     try {
       const total = calculateTotal();
+      const tmdbId = movie?.tmdb_id?.toString() || showInfo.movie_id;
 
       // Prepare seats data for JSONB storage (with passenger names)
       const seatsData = selectedSeats.map(seat => ({
-        id: seat.id,
+        id: `${seat.row_label}${seat.seat_number}`,
         row_label: seat.row_label,
         seat_number: seat.seat_number,
         category: seat.category,
@@ -339,7 +385,7 @@ export default function Booking() {
       if (bookingMode === 'guest') {
         // Guest checkout
         const result = await supabase.rpc('complete_guest_booking', {
-          _tmdb_movie_id: showInfo.movie_id,
+          _tmdb_movie_id: tmdbId,
           _movie_title: movie?.title || 'Movie',
           _movie_poster_url: movie?.poster_url || null,
           _theater_name: showInfo.theater_name,
@@ -358,7 +404,7 @@ export default function Booking() {
       } else {
         // Logged in user booking
         const result = await supabase.rpc('complete_app_booking', {
-          _tmdb_movie_id: showInfo.movie_id,
+          _tmdb_movie_id: tmdbId,
           _movie_title: movie?.title || 'Movie',
           _movie_poster_url: movie?.poster_url || null,
           _theater_name: showInfo.theater_name,
@@ -472,7 +518,7 @@ export default function Booking() {
         {/* Header */}
         <div className="mb-8">
           <Button variant="ghost" asChild className="mb-4">
-            <Link to={`/movies/${showInfo.movie_id}`}>
+            <Link to={`/movies/${movie?.tmdb_id || movie?.id || showInfo.movie_id}`}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Movie
             </Link>
