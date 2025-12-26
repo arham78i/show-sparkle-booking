@@ -193,6 +193,7 @@ export type Database = {
       }
       movies: {
         Row: {
+          backdrop_url: string | null
           created_at: string
           description: string | null
           duration_minutes: number
@@ -204,10 +205,12 @@ export type Database = {
           release_date: string | null
           status: Database["public"]["Enums"]["movie_status"]
           title: string
+          tmdb_id: number | null
           trailer_url: string | null
           updated_at: string
         }
         Insert: {
+          backdrop_url?: string | null
           created_at?: string
           description?: string | null
           duration_minutes?: number
@@ -219,10 +222,12 @@ export type Database = {
           release_date?: string | null
           status?: Database["public"]["Enums"]["movie_status"]
           title: string
+          tmdb_id?: number | null
           trailer_url?: string | null
           updated_at?: string
         }
         Update: {
+          backdrop_url?: string | null
           created_at?: string
           description?: string | null
           duration_minutes?: number
@@ -234,6 +239,7 @@ export type Database = {
           release_date?: string | null
           status?: Database["public"]["Enums"]["movie_status"]
           title?: string
+          tmdb_id?: number | null
           trailer_url?: string | null
           updated_at?: string
         }
@@ -620,6 +626,23 @@ export type Database = {
           message: string
           success: boolean
         }[]
+      }
+      upsert_tmdb_movie: {
+        Args: {
+          _backdrop_url: string
+          _description: string
+          _duration_minutes: number
+          _genre: string[]
+          _language: string
+          _poster_url: string
+          _rating: number
+          _release_date: string
+          _status: Database["public"]["Enums"]["movie_status"]
+          _title: string
+          _tmdb_id: number
+          _trailer_url: string
+        }
+        Returns: string
       }
     }
     Enums: {

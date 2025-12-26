@@ -3,14 +3,17 @@ import { Link } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { MovieGrid } from '@/components/movies/MovieGrid';
 import { Button } from '@/components/ui/button';
-import { useNowPlayingMovies, useUpcomingMovies, AppMovie } from '@/hooks/useTMDBMovies';
-import { Play, ChevronRight, Sparkles, Clock, Star, Calendar } from 'lucide-react';
+import { useNowShowingMovies, useUpcomingMovies, SupabaseMovie, useSyncMovies } from '@/hooks/useSupabaseMovies';
+import { Play, ChevronRight, Sparkles, Clock, Star, Calendar, RefreshCw } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Index() {
-  const { movies: nowShowing, loading: loadingNowShowing } = useNowPlayingMovies();
+  const { movies: nowShowing, loading: loadingNowShowing } = useNowShowingMovies();
   const { movies: comingSoon, loading: loadingComingSoon } = useUpcomingMovies();
-  const [featured, setFeatured] = useState<AppMovie | null>(null);
+  const { syncMovies, syncing } = useSyncMovies();
+  const [featured, setFeatured] = useState<SupabaseMovie | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (nowShowing.length > 0) {
@@ -18,7 +21,43 @@ export default function Index() {
     }
   }, [nowShowing]);
 
+  // Auto-sync movies if none exist
+  useEffect(() => {
+    async function autoSync() {
+      if (!loadingNowShowing && nowShowing.length === 0) {
+        console.log('No movies found, syncing from TMDB...');
+        const result = await syncMovies();
+        if (result.success) {
+          toast({
+            title: 'Movies synced!',
+            description: result.message,
+          });
+          // Reload page to show new movies
+          window.location.reload();
+        }
+      }
+    }
+    autoSync();
+  }, [loadingNowShowing, nowShowing.length]);
+
   const loading = loadingNowShowing || loadingComingSoon;
+
+  const handleManualSync = async () => {
+    const result = await syncMovies();
+    if (result.success) {
+      toast({
+        title: 'Movies synced!',
+        description: result.message,
+      });
+      window.location.reload();
+    } else {
+      toast({
+        title: 'Sync failed',
+        description: result.message,
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
     <Layout>
@@ -82,7 +121,7 @@ export default function Index() {
                 
                 <div className="flex items-center gap-4 pt-4">
                   <Button size="lg" asChild className="cinema-glow">
-                    <Link to={`/movies/${featured.tmdb_id}`}>
+                    <Link to={`/movies/${featured.tmdb_id || featured.id}`}>
                       <Play className="mr-2 h-5 w-5" />
                       Book Tickets
                     </Link>
@@ -102,12 +141,20 @@ export default function Index() {
                   Experience the latest blockbusters on the big screen. 
                   Book your seats now and enjoy an unforgettable cinema experience.
                 </p>
-                <Button size="lg" asChild className="cinema-glow">
-                  <Link to="/movies">
-                    Browse Movies
-                    <ChevronRight className="ml-2 h-5 w-5" />
-                  </Link>
-                </Button>
+                <div className="flex items-center gap-4">
+                  <Button size="lg" asChild className="cinema-glow">
+                    <Link to="/movies">
+                      Browse Movies
+                      <ChevronRight className="ml-2 h-5 w-5" />
+                    </Link>
+                  </Button>
+                  {!loading && nowShowing.length === 0 && (
+                    <Button size="lg" variant="outline" onClick={handleManualSync} disabled={syncing}>
+                      <RefreshCw className={`mr-2 h-5 w-5 ${syncing ? 'animate-spin' : ''}`} />
+                      {syncing ? 'Syncing...' : 'Sync Movies'}
+                    </Button>
+                  )}
+                </div>
               </>
             )}
           </div>

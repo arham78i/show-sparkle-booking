@@ -1,1 +1,4 @@
 project_id = "npzwyvdouaxbvpihyfgx"
+
+[functions.sync-tmdb-movies]
+verify_jwt = false

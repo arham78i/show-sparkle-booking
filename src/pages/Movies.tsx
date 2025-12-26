@@ -5,7 +5,7 @@ import { MovieGrid } from '@/components/movies/MovieGrid';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useAllMovies, useSearchMovies, AppMovie } from '@/hooks/useTMDBMovies';
+import { useAllMovies, useSearchMovies, SupabaseMovie } from '@/hooks/useSupabaseMovies';
 import { Search, X } from 'lucide-react';
 
 const genres = ['Action', 'Comedy', 'Drama', 'Horror', 'Sci-Fi', 'Romance', 'Thriller', 'Animation'];
@@ -34,7 +34,7 @@ export default function Movies() {
 
   // Filter movies
   const filteredMovies = useMemo(() => {
-    let movies: AppMovie[] = debouncedSearch ? searchResults : allMovies;
+    let movies: SupabaseMovie[] = debouncedSearch ? searchResults : allMovies;
 
     // Filter by genres
     if (selectedGenres.length > 0) {

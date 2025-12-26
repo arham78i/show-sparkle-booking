@@ -1,9 +1,9 @@
 import { MovieCard } from './MovieCard';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AppMovie } from '@/hooks/useTMDBMovies';
+import { SupabaseMovie } from '@/hooks/useSupabaseMovies';
 
 interface MovieGridProps {
-  movies: AppMovie[];
+  movies: SupabaseMovie[];
   loading?: boolean;
 }
 
