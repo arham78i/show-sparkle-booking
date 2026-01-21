@@ -39,13 +39,43 @@ export default function MovieDetails() {
   const { movies: similarMovies, loading: similarLoading } = useSimilarMovies(id);
   const [shows, setShows] = useState<ShowWithDetails[]>([]);
   const [showsLoading, setShowsLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>('');
 
-  const dates = Array.from({ length: 7 }, (_, i) => {
-    const date = addDays(new Date(), i);
+  // Fetch available dates for this movie
+  useEffect(() => {
+    async function fetchAvailableDates() {
+      if (!movie?.id) return;
+      
+      const { data, error } = await supabase
+        .from('shows')
+        .select('show_date')
+        .eq('movie_id', movie.id)
+        .eq('is_active', true)
+        .gte('show_date', format(new Date(), 'yyyy-MM-dd'))
+        .order('show_date', { ascending: true });
+      
+      if (!error && data) {
+        const uniqueDates = [...new Set(data.map(d => d.show_date))].slice(0, 7);
+        setAvailableDates(uniqueDates);
+        if (uniqueDates.length > 0 && !selectedDate) {
+          setSelectedDate(uniqueDates[0]);
+        }
+      }
+    }
+    fetchAvailableDates();
+  }, [movie?.id]);
+
+  const dates = availableDates.map(dateStr => {
+    const date = parseISO(dateStr);
+    const today = new Date();
+    const tomorrow = addDays(today, 1);
+    const isDateToday = format(date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
+    const isDateTomorrow = format(date, 'yyyy-MM-dd') === format(tomorrow, 'yyyy-MM-dd');
+    
     return {
-      date: format(date, 'yyyy-MM-dd'),
-      label: isToday(date) ? 'Today' : isTomorrow(date) ? 'Tomorrow' : format(date, 'EEE'),
+      date: dateStr,
+      label: isDateToday ? 'Today' : isDateTomorrow ? 'Tomorrow' : format(date, 'EEE'),
       day: format(date, 'd'),
       month: format(date, 'MMM'),
     };
